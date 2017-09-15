@@ -58,18 +58,40 @@ src_var_groups = {
         'src_grid' : 'POP_gx1v6',
         'depth_coordname' : 'none',
         'time_coordname' : 'time',
-        'interp_method' : 'conserve'}}
+        'interp_method' : 'conserve'}},
+    #----------------------------------------------
+    'ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717' : {
+    #----------------------------------------------
+        'NHx_deposition' :
+        {'varname_in' : 'NHx_deposition',
+         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'},
+        'NOy_deposition' :
+        {'varname_in' : 'NOy_deposition',
+         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'}}
         }
 
-#        'fname_in' : '/glade/p/cesmdata/cseg/inputdata/ocn/pop/gx1v6/forcing/solFe_scenario4_current_gx1v6.nc',
+#-- make some modifications to coordinates
 clean_up = []
 for data_type,var_defs_dict in src_var_groups.items():
-    #if 'FESEDFLUXIN' not in var_defs_dict: continue
+
     flux_file_in = os.path.join(odir,data_type+'.nc')
     if 'FESEDFLUXIN' in var_defs_dict:
         flux_file_out = var_defs_dict['FESEDFLUXIN']['fname_in']
     elif 'DSTSF' in var_defs_dict:
         flux_file_out = var_defs_dict['DSTSF']['fname_in']
+    elif 'NHx_deposition' in var_defs_dict:
+        flux_file_out = var_defs_dict['NHx_deposition']['fname_in']
+    else:
+        continue
+
     if not os.path.exists(flux_file_out) or clobber:
         clean_up.append(flux_file_out)
         call(['cp','-v',flux_file_in,flux_file_out])
