@@ -55,10 +55,20 @@ src_var_groups = {
         'DSTSF' :
         {'varname_in' : 'DSTSF',
          'fname_in' : os.path.join(odir,'work','solFe_scenario4_current_gx1v6.nc'),
-        'src_grid' : 'POP_gx1v6',
-        'depth_coordname' : 'none',
-        'time_coordname' : 'time',
-        'interp_method' : 'conserve'}},
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'}},
+    #----------------------------------------------
+    'dst79gnx_gx1v6_090416' : {
+    #----------------------------------------------
+        'DSTSF' :
+        {'varname_in' : 'DSTSF',
+         'fname_in' : os.path.join(odir,'work','dst79gnx_gx1v6_090416.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'}},
     #----------------------------------------------
     'ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717' : {
     #----------------------------------------------
@@ -84,26 +94,36 @@ for data_type,var_defs_dict in src_var_groups.items():
 
     flux_file_in = os.path.join(odir,data_type+'.nc')
     if 'FESEDFLUXIN' in var_defs_dict:
-        flux_file_out = var_defs_dict['FESEDFLUXIN']['fname_in']
+        v = 'FESEDFLUXIN'
     elif 'DSTSF' in var_defs_dict:
-        flux_file_out = var_defs_dict['DSTSF']['fname_in']
+        v = 'DSTSF'
     elif 'NHx_deposition' in var_defs_dict:
-        flux_file_out = var_defs_dict['NHx_deposition']['fname_in']
+        v = 'NHx_deposition'
     else:
         continue
+
+    flux_file_out = var_defs_dict[v]['fname_in']
 
     if not os.path.exists(flux_file_out) or clobber:
         clean_up.append(flux_file_out)
         call(['cp','-v',flux_file_in,flux_file_out])
 
-        if 'DSTSF' in var_defs_dict:
-            call(['ncrename','-d','X,nlon','-d','Y,nlat',flux_file_out])
+        #-- add depth coord to 3D fields
+        if 'FESEDFLUXIN' in var_defs_dict:
+            call(['ncks','-A','-v','depth',regrid.vert_grid_file('POP_gx1v7'),
+                  flux_file_out])
 
-        call(['ncks','-A','-v','depth',regrid.vert_grid_file('POP_gx1v7'),
-              flux_file_out])
-        call(['ncks','-A','-v','TLATd,TLONd',regrid.grid_file('POP_gx1v7'),
-              flux_file_out])
-        call(['ncrename','-v','TLATd,TLAT','-v','TLONd,TLONG',flux_file_out])
+        #-- pull coords from mapping file
+        call(['ncks','-O','-v','TLATd,TLONd',regrid.grid_file('POP_gx1v7'),
+              flux_file_out+'.tmp'])
+        call(['ncrename','-v','TLATd,TLAT','-v','TLONd,TLONG',flux_file_out+'.tmp'])
+
+        #-- remove old coords
+        call(['ncks','-O','-v','TLONG,TLAT','-x',flux_file_out,flux_file_out])
+
+        #-- append mapping file coords
+        call(['ncks','-A',flux_file_out+'.tmp',flux_file_out])
+        call(['rm','-f',flux_file_out+'.tmp'])
 
 #----------------------------------------------------
 #--- perform regridding

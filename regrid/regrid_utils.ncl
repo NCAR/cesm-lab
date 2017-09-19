@@ -20,6 +20,7 @@ local f_wgtFile, yc_a, xc_a, src_grid_type, vardims, rank, y, x, yc_var, xc_var
 begin
    yc_a = f_wgtFile->yc_a
    xc_a = f_wgtFile->xc_a
+   xc_a = where(xc_a .ge. 180., xc_a - 360., xc_a)
 
    src_grid_type = str_get_field(opt@src_grid, 1, "_")
    debug_print("src_grid_type = ", src_grid_type, opt)
@@ -32,12 +33,13 @@ begin
        rank = dimsizes(vardims)
        y = f->$vardims(rank-2)$
        x = f->$vardims(rank-1)$
+       x = where(x .gt. 180., x - 360., x)
        yc_var = ndtooned(conform_dims((/ dimsizes(y), dimsizes(x) /), y, 0))
        xc_var = ndtooned(conform_dims((/ dimsizes(y), dimsizes(x) /), x, 1))
    else if (src_grid_type .eq. "POP") then
        yc_var = ndtooned(f->TLAT)
        xc_var = ndtooned(f->TLONG)
-       xc_var = where(xc_var .gt. 180., xc_var - 360., xc_var)
+       xc_var = where(xc_var .ge. 180., xc_var - 360., xc_var)
    end if
    end if
 
@@ -51,7 +53,7 @@ begin
 
    ;
    ; verify that yc_var and xc_var agree with yc_a and xc_a from wgtFile
-   ;   
+   ;
    mismatch = False
    if (any(abs(yc_var - yc_a) .gt. 1e-5)) then
       print("yc_a mismatch for "+varname)
@@ -60,6 +62,7 @@ begin
    end if
    if (any(abs(xc_var - xc_a) .gt. 1e-5)) then
       print("xc_a mismatch for "+varname)
+      print("max mismatch = "+max(abs(xc_var - xc_a)))
       print("src_grid = "+opt@src_grid)
       mismatch = True
    end if

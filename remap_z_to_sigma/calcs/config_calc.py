@@ -2,7 +2,7 @@ import os
 import sys
 from subprocess import call
 
-path_tools = '~mclong/p/tools'
+path_tools = '~mclong/p/easy-analysis'
 sys.path.insert(0,os.path.abspath(os.path.expanduser(path_tools)))
 
 from datetime import datetime
