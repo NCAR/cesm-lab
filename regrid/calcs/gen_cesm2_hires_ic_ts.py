@@ -8,6 +8,8 @@
 #BSUB -q geyser
 #BSUB -N
 from config_calc import *
+from regrid_var_groups import regrid_var_groups
+import seawater as sw
 
 nowstr = datetime.now().strftime('%Y%m%d')
 clobber = False
@@ -60,12 +62,39 @@ for ts in ['t','s']:
     dso.to_netcdf(file_out)
     print('wrote %s'%file_out)
 
+
+#----------------------------------------------------
+#--- convert to potential temperature
+#----------------------------------------------------
+
+woa_pth = '/glade/p/ncgd0033/inputdata/ic/work'
+
+file_out = woa_pth+'/woa13_decav_ptmp01_blend_13_04v2.nc'
+if not os.path.exists(file_out):
+
+    #-- read temperature and salinity
+    dst = xr.open_dataset(woa_pth+'/woa13_decav_t01_blend_13_04v2.nc',
+                          decode_times = False,
+                          decode_coords = False)
+    dss = xr.open_dataset(woa_pth+'/woa13_decav_s01_blend_13_04v2.nc',
+                          decode_times = False,
+                          decode_coords = False)
+
+    #-- compute pressure
+    na = np.newaxis
+    pressure = sw.eos80.pres(dst.depth.values[na,:,na,na],dst.lat.values[na,na,:,na])
+
+    dso = dst.copy()
+    dso.t_an.values = sw.eos80.ptmp(dss.s_an.values, dst.t_an.values, pressure, pr=0.)
+    dso.t_an.attrs['note'] = 'Coverted to potential temperature using EOS-80: http://pythonhosted.org/seawater/eos80.html'
+    dso.to_netcdf(file_out)
+    print('wrote %s'%file_out)
+
 #----------------------------------------------------
 #--- perform regridding
 #----------------------------------------------------
 
 odir = '/glade/p/ncgd0033/inputdata/ic'
-woa_pth = '/glade/p/ncgd0033/inputdata/ic/work'
 if not os.path.exists(odir):
     call(['mkdir','-p',odir])
 
@@ -74,7 +103,7 @@ src_var_groups = {
         #----------------------------------------------
         'TEMPERATURE' :
         {'varname_in' : 't_an',
-         'fname_in' : woa_pth+'/woa13_decav_t01_blend_13_04v2.nc',
+         'fname_in' : woa_pth+'/woa13_decav_ptmp01_blend_13_04v2.nc',
          'src_grid':'latlon_0.25x0.25_180W',
          'time_coordname' : 'time',
          'depth_coordname' : 'depth'},
@@ -86,66 +115,12 @@ src_var_groups = {
          'time_coordname' : 'time',
          'depth_coordname' : 'depth'}}}
 
-#-- loop over variable groups
-for data_type,var_defs_dict in src_var_groups.items():
 
-    #-- create new file
-    outfile_opt = 'create'
-    file_out = os.path.join(odir,'.'.join([data_type,dst_grid,nowstr,'nc']))
-    if os.path.exists(file_out) and not clobber:
-        continue
-
-    #-- ensure that output path exists
-    if not os.path.exists(os.path.dirname(file_out)):
-        call(['mkdir','-pv',os.path.dirname(file_out)])
-
-    #-- loop over variables in group
-    for varname_out,src in var_defs_dict.items():
-
-        #-- source and destination grids
-        src_grid = src['src_grid']
-        srcGridFile = regrid.grid_file(src_grid)
-        dstGridFile = regrid.grid_file(dst_grid)
-        if not os.path.exists(srcGridFile):
-            print('missing src grid file %s'%srcGridFile)
-            exit(1)
-        if not os.path.exists(dstGridFile):
-            print('missing dst grid file %s'%dstGridFile)
-            exit(1)
-
-        #-- interp method: default or specified?
-        if 'interp_method' in src:
-            interp_method = src['interp_method']
-        else:
-            interp_method = interp_method_default
-
-        #-- regrid weights file
-        wgtFile = regrid.wgt_file(src_grid,dst_grid,interp_method)
-        if not os.path.exists(wgtFile):
-            print('missing weight file: %s'%wgtFile)
-            print('generating: %s'%wgtFile)
-            ok = regrid.gen_weight_file(wgtFile = wgtFile,
-                                        srcGridFile = srcGridFile,
-                                        dstGridFile = dstGridFile,
-                                        InterpMethod = interp_method)
-        #-- regrid variable
-        print('-'*40)
-        print('regridding %s on %s --> %s on %s'%(src['varname_in'],src_grid,
-                                                   varname_out,dst_grid))
-        ok = regrid.regrid_var(wgtFile = wgtFile,
-                               fname_in = src['fname_in'],
-                               varname_in = src['varname_in'],
-                               time_coordname = src['time_coordname'],
-                               depth_coordname = src['depth_coordname'],
-                               vert_grid_file = vert_grid_file,
-                               fname_out = file_out,
-                               varname_out = varname_out,
-                               src_grid = src_grid,
-                               dst_grid = dst_grid,
-                               postfill_opt = postfill_opt,
-                               prefill_opt = prefill_opt,
-                               outfile_opt = outfile_opt)
-        if not ok: exit(1)
-
-        #-- set to append for rest of group
-        outfile_opt = 'append'
+regrid_var_groups(src_var_groups = src_var_groups,
+                  output_directory = odir,
+                  dst_grid = dst_grid,
+                  vert_grid_file = vert_grid_file,
+                  interp_method_default = interp_method_default,
+                  postfill_opt = postfill_opt,
+                  prefill_opt = prefill_opt,
+                  clobber = clobber)
