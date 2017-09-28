@@ -201,9 +201,7 @@ def calc_ann_mean(ds):
         dso = dso.assign_coords(time=time_coord)
         dso['year'] = year
 
-        print dso
-        print dsg
-        
+
         #-- put the grid variables back
         dso = xr.merge((dso,dsg))
 
@@ -333,7 +331,7 @@ def tseries_dataset(case_files, yr0,
 
     #-- concatenate
     if len(dsi) > 1:
-        dsi = xr.concat(dsi,dim='time')
+        dsi = xr.concat(dsi,dim='time',data_vars='minimal')
     elif len(dsi) > 0:
         dsi = dsi[0]
 
