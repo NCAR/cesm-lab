@@ -30,21 +30,21 @@ if not os.path.exists(odir): call(['mkdir','-p',odir])
 
 src_var_groups = {
     #----------------------------------------------
-    'feventflux_gx1v6_4gmol_cesm2.0_2017' : {
+    'feventflux_gx1v6_5gmol_cesm1_97_2017' : {
     #----------------------------------------------
         'FESEDFLUXIN' :
         {'varname_in' : 'FESEDFLUXIN',
-         'fname_in' : os.path.join(odir,'work','feventflux_gx1v6_4gmol_cesm2.0_2017.nc'),
+         'fname_in' : os.path.join(odir,'work','feventflux_gx1v6_5gmol_cesm1_97_2017.nc'),
          'src_grid' : 'POP_gx1v6',
          'depth_coordname' : 'depth',
          'time_coordname' : 'none',
          'interp_method' : 'conserve'}},
     #----------------------------------------------
-    'fesedflux_gx1v6_cesm2_2017_tmp' :  {
+    'fesedflux_Oxic_plus_Reduc_gx1v6_cesm1_97_2017' :  {
     #----------------------------------------------
         'FESEDFLUXIN' :
         {'varname_in' : 'FESEDFLUXIN',
-         'fname_in' : os.path.join(odir,'work','fesedflux_gx1v6_cesm2_2017_tmp.nc'),
+         'fname_in' : os.path.join(odir,'work','fesedflux_Oxic_plus_Reduc_gx1v6_cesm1_97_2017.nc'),
          'src_grid' : 'POP_gx1v6',
          'depth_coordname' : 'depth',
          'time_coordname' : 'none',
@@ -70,34 +70,60 @@ src_var_groups = {
          'time_coordname' : 'time',
          'interp_method' : 'conserve'}},
     #----------------------------------------------
-    'ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717' : {
+    'ndep_ocn_1850_w_nhx_emis_gx1v6_c160716' : {
     #----------------------------------------------
         'NHx_deposition' :
         {'varname_in' : 'NHx_deposition',
-         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717.nc'),
+         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850_w_nhx_emis_gx1v6_c160716.nc'),
          'src_grid' : 'POP_gx1v6',
          'depth_coordname' : 'none',
          'time_coordname' : 'time',
          'interp_method' : 'conserve'},
         'NOy_deposition' :
         {'varname_in' : 'NOy_deposition',
-         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850-2005_w_nhx_emis_gx1v6_c160717.nc'),
+         'fname_in' : os.path.join(odir,'work','ndep_ocn_1850_w_nhx_emis_gx1v6_c160716.nc'),
          'src_grid' : 'POP_gx1v6',
          'depth_coordname' : 'none',
          'time_coordname' : 'time',
-         'interp_method' : 'conserve'}}
+         'interp_method' : 'conserve'}},
+    #----------------------------------------------
+    'b.e20.B1850.f09_g17.pi_control.all.179.cplhist.cpl.presaero.clim.0037-0056.gx1v6.c20170823' : {
+    #----------------------------------------------
+        'DSTSF' :
+        {'varname_in' : 'DSTSF',
+         'fname_in' : os.path.join(odir,'work','b.e20.B1850.f09_g17.pi_control.all.179.cplhist.cpl.presaero.clim.0037-0056.gx1v6.c20170823.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'},
+        'BC' :
+        {'varname_in' : 'BC',
+         'fname_in' : os.path.join(odir,'work','b.e20.B1850.f09_g17.pi_control.all.179.cplhist.cpl.presaero.clim.0037-0056.gx1v6.c20170823.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'},
+        'solFe' :
+        {'varname_in' : 'solFe',
+         'fname_in' : os.path.join(odir,'work','b.e20.B1850.f09_g17.pi_control.all.179.cplhist.cpl.presaero.clim.0037-0056.gx1v6.c20170823.nc'),
+         'src_grid' : 'POP_gx1v6',
+         'depth_coordname' : 'none',
+         'time_coordname' : 'time',
+         'interp_method' : 'conserve'}
         }
+}
+
 
 #-- make some modifications to coordinates
 clean_up = []
 for data_type,var_defs_dict in src_var_groups.items():
 
     flux_file_in = os.path.join(odir,data_type+'.nc')
-    if 'FESEDFLUXIN' in var_defs_dict:
+    if 'feventflux' in data_type or 'fesedflux' in data_type:
         v = 'FESEDFLUXIN'
-    elif 'DSTSF' in var_defs_dict:
+    elif any([data_type == d for d in ['solFe_scenario4_current_gx1v6','dst79gnx_gx1v6_090416','b.e20.B1850.f09_g17.pi_control.all.179.cplhist.cpl.presaero.clim.0037-0056.gx1v6.c20170823']]):
         v = 'DSTSF'
-    elif 'NHx_deposition' in var_defs_dict:
+    elif 'ndep_ocn_1850_w_nhx_emis_gx1v6_c160716' == data_type:
         v = 'NHx_deposition'
     else:
         continue

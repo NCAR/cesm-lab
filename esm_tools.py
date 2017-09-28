@@ -201,6 +201,9 @@ def calc_ann_mean(ds):
         dso = dso.assign_coords(time=time_coord)
         dso['year'] = year
 
+        print dso
+        print dsg
+        
         #-- put the grid variables back
         dso = xr.merge((dso,dsg))
 
@@ -216,6 +219,39 @@ def pop_total_ocean_volume(ds):
             k = ds.KMT.values[j,i].astype(int)
             vol_values[k:,j,i] = 0.
     return vol_values.sum()
+
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+def apply_drift_correction(variable,ds_ctrl,ds_list,file_out_list=[]):
+
+    if file_out_list:
+        if len(file_out_list) != len(ds_list):
+            print('File out list does not match ds_list')
+            sys.exit(1)
+
+    #-- make time vector
+    nt = len(ds_ctrl.time)
+    x = np.arange(0,nt,1)
+
+    #-- read data
+    y = ds_ctrl[variable].values.reshape((nt,-1))
+
+    # compute regression coeff
+    beta = np.polyfit(x,y,1)
+
+    #-- compute drift
+    drift = (beta[0,:] * x[:,None]).reshape(ds_ctrl[variable].shape)
+
+    for i,ds in enumerate(ds_list):
+        ds_list[i][variable].values = ds[variable].values - drift
+
+    if file_out_list:
+        for i,f in enumerate(file_out_list):
+            ds_list[i].to_netcdf(f,unlimited_dims='time')
+
+    return ds_list
 
 #----------------------------------------------------------------
 #-- function
@@ -305,6 +341,69 @@ def tseries_dataset(case_files, yr0,
         dsi.to_netcdf(file_out,unlimited_dims='time')
 
     return dsi
+
+#----------------------------------------------------------------
+#---- CLASS
+#----------------------------------------------------------------
+class hfile( object ):
+    def __init__(self,
+                 dirname = '',
+                 prefix  = '',
+                 ens     = '',
+                 stream  = '',
+                 op      = '',
+                 varname     = '',
+                 datestr = '',
+                 ext = 'nc'):
+
+        self.dirname = dirname
+        self.prefix  = prefix
+        self.ens     = ens
+        self.stream  = stream
+        self.op      = op
+        self.varname = varname
+        self.datestr = datestr
+        self.ext     = ext
+
+    def __str__(self):
+        name_parts = []
+        for n in ['prefix','ens','stream','op','varname','datestr','ext']:
+            if self.__dict__[n]: name_parts.append(self.__dict__[n])
+        return os.path.join(self.dirname,'.'.join(name_parts))
+
+    def copy(self):
+        import copy
+        return copy.copy(self)
+
+    def append(self,**kwargs):
+        new = self.copy()
+        for key,value in kwargs.items():
+            if key in self.__dict__:
+                new.__dict__[key] = '_'.join([self.__dict__[key],value])
+            else:
+                raise AttributeError('%s has no attribute %s'%
+                                     (self.__class__.__name__,key))
+        return new
+
+    def prepend(self,**kwargs):
+        new = self.copy()
+        for key,value in kwargs.items():
+            if key in self.__dict__:
+                new.__dict__[key] = '_'.join([value,self.__dict__[key]])
+            else:
+                raise AttributeError('%s has no attribute %s'%
+                                     (self.__class__.__name__,key))
+        return new
+
+    def update(self,**kwargs):
+        new = self.copy()
+        for key,value in kwargs.items():
+            if key in self.__dict__:
+                new.__dict__[key] = value
+            else:
+                raise AttributeError('%s has no attribute %s'%
+                                     (self.__class__.__name__,key))
+        return new
 
 if __name__ == '__main__':
     import argparse

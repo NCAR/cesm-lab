@@ -14,14 +14,6 @@ import seawater as sw
 nowstr = datetime.now().strftime('%Y%m%d')
 clobber = False
 
-dst_grid = 'POP_tx0.1v3_62lev'
-vert_grid_file = regrid.vert_grid_file('POP_tx0.1_km62')
-interp_method_default = 'bilinear'
-
-#dst_grid = 'POP_gx1v7'
-#vert_grid_file = regrid.vert_grid_file('POP_gx1v7')
-#interp_method_default = 'conserve'
-
 postfill_opt = 'fill_ocean_vals_smooth'
 prefill_opt = 'zeros'
 
@@ -115,6 +107,22 @@ src_var_groups = {
          'time_coordname' : 'time',
          'depth_coordname' : 'depth'}}}
 
+dst_grid = 'POP_tx0.1v3_62lev'
+vert_grid_file = regrid.vert_grid_file('POP_tx0.1_km62')
+interp_method_default = 'bilinear'
+
+regrid_var_groups(src_var_groups = src_var_groups,
+                  output_directory = odir,
+                  dst_grid = dst_grid,
+                  vert_grid_file = vert_grid_file,
+                  interp_method_default = interp_method_default,
+                  postfill_opt = postfill_opt,
+                  prefill_opt = prefill_opt,
+                  clobber = clobber)
+
+dst_grid = 'POP_gx1v7'
+vert_grid_file = regrid.vert_grid_file('POP_gx1v7')
+interp_method_default = 'conserve'
 
 regrid_var_groups(src_var_groups = src_var_groups,
                   output_directory = odir,
