@@ -360,13 +360,15 @@ class hfile(object):
                                    ('op',''),
                                    ('varname',''),
                                    ('datestr',''),
-                                   ('ext','')])
+                                   ('ext','nc')])
         self.update(**kwargs)
 
     def __str__(self):
         '''Return the file name as a string.
         '''
-        return '.'.join([s for s in self._parts.values() if s])
+        return os.path.join(self._parts['dirname'],
+                            '.'.join([s for k,s in self._parts.items()
+                                      if s and k != 'dirname']))
 
     def __call__(self):
         '''Call __str__ method.
