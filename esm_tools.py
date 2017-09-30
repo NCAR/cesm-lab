@@ -343,65 +343,77 @@ def tseries_dataset(case_files, yr0,
 #----------------------------------------------------------------
 #---- CLASS
 #----------------------------------------------------------------
-class hfile( object ):
-    def __init__(self,
-                 dirname = '',
-                 prefix  = '',
-                 ens     = '',
-                 stream  = '',
-                 op      = '',
-                 varname     = '',
-                 datestr = '',
-                 ext = 'nc'):
+class hfile(object):
+    '''A file name object with an underlying dictionary of parts.
+    '''
+    def __init__(self,**kwargs):
+        '''Build file name from fields in OrderedDict.
 
-        self.dirname = dirname
-        self.prefix  = prefix
-        self.ens     = ens
-        self.stream  = stream
-        self.op      = op
-        self.varname = varname
-        self.datestr = datestr
-        self.ext     = ext
+        Kwargs:
+        fields in the dictionary
+        '''
+        from collections import OrderedDict
+        self._parts = OrderedDict([('dirname',''),
+                                   ('prefix',''),
+                                   ('ens',''),
+                                   ('stream',''),
+                                   ('op',''),
+                                   ('varname',''),
+                                   ('datestr',''),
+                                   ('ext','')])
+        self.update(**kwargs)
 
     def __str__(self):
-        name_parts = []
-        for n in ['prefix','ens','stream','op','varname','datestr','ext']:
-            if self.__dict__[n]: name_parts.append(self.__dict__[n])
-        return os.path.join(self.dirname,'.'.join(name_parts))
+        '''Return the file name as a string.
+        '''
+        return '.'.join([s for s in self._parts.values() if s])
+
+    def __call__(self):
+        '''Call __str__ method.
+        '''
+        return self.__str__()
 
     def copy(self):
+        '''Return a copy.
+        '''
         import copy
-        return copy.copy(self)
+        return copy.deepcopy(self)
 
     def append(self,**kwargs):
-        new = self.copy()
+        '''Append a filename part with string.
+        '''
+        self._check_args(**kwargs)
         for key,value in kwargs.items():
-            if key in self.__dict__:
-                new.__dict__[key] = '_'.join([self.__dict__[key],value])
-            else:
-                raise AttributeError('%s has no attribute %s'%
-                                     (self.__class__.__name__,key))
-        return new
+            self._parts[key] = '_'.join([self._parts[key],value])
 
     def prepend(self,**kwargs):
-        new = self.copy()
+        '''Prepend a filename part with string.
+        '''
+        self._check_args(**kwargs)
         for key,value in kwargs.items():
-            if key in self.__dict__:
-                new.__dict__[key] = '_'.join([value,self.__dict__[key]])
-            else:
-                raise AttributeError('%s has no attribute %s'%
-                                     (self.__class__.__name__,key))
-        return new
+            self._parts[key] = '_'.join([value,self._parts[key]])
 
     def update(self,**kwargs):
-        new = self.copy()
-        for key,value in kwargs.items():
-            if key in self.__dict__:
-                new.__dict__[key] = value
-            else:
-                raise AttributeError('%s has no attribute %s'%
-                                     (self.__class__.__name__,key))
-        return new
+        '''Change file name parts.
+        '''
+        self._check_args(**kwargs)
+        self._parts.update(**kwargs)
+
+    def exists(self):
+        '''Check if file exists on disk.
+        '''
+        return os.path.exists(self())
+
+    def _check_args(self,**kwargs):
+        '''Private method: check that kwargs are defined fields.
+        '''
+        valid = [kw in self._parts.keys() for kw in kwargs.keys()]
+        if not all(valid):
+            raise AttributeError('%s has no attribute(s): %s'%
+                                 (self.__class__.__name__,
+                                 str([kwargs.keys()[i]
+                                      for i,k in enumerate(valid) if not k])))
+
 
 if __name__ == '__main__':
     import argparse
