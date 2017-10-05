@@ -18,8 +18,8 @@ datestr = regrid.nowstr
 #------------------------------------------------
 #--- generate POP grids
 #------------------------------------------------
-if clobber or any([not os.path.exists(regrid.grid_file(g)) 
-                   for g in 
+if clobber or any([not os.path.exists(regrid.grid_file(g))
+                   for g in
                    ['POP_gx3v7','POP_gx1v6','POP_gx1v7','POP_tx1v1','POP_tx0.1v2',
                     'POP_tx0.1v3_62lev']]):
 
@@ -30,6 +30,26 @@ if clobber or any([not os.path.exists(regrid.grid_file(g))
 
 dst_grids = ['POP_gx3v7','POP_gx1v6','POP_gx1v7','POP_tx1v1','POP_tx0.1v2']
 src_grids = ['POP_gx1v7','POP_gx1v6']
+
+#------------------------------------------------
+#--- generate rectilinear grids
+#------------------------------------------------
+
+rectilinear_grids = [{'grid_name': 'T62',
+                      'latlon_file' : '/glade/p/cesm/cseg/inputdata/atm/datm7/NYF/nyf.ncep.T62.050923.nc'},
+                     {'grid_name': 'f09',
+                      'latlon_file' : '/glade/p/work/mclong/grids/f09_f09.nc'}]
+
+print('-'*40)
+print('generating rectilinear grids')
+for d in rectilinear_grids:
+    grid = '_'.join(['rectilinear',d['grid_name']])
+    src_grids.append(grid)
+    fname = regrid.grid_file(grid)
+    if not os.path.exists(fname) or clobber:
+        print('grid_name = %s'%grid)
+        d.update({'grid_out_fname' : fname})
+        ok = regrid.gen_rectilinear_grid_file(**d)
 
 #------------------------------------------------
 #--- generate latlon grids
@@ -54,9 +74,9 @@ latlon_grids = [{'grid_type': '1x1',
                  'dlon': 0.25,
                  'left_lon_corner' : -180.}]
 print('-'*40)
-print('generating latlat grids')                
+print('generating latlat grids')
 for d in latlon_grids:
-    left_lon_corner_str = lon_str(d['left_lon_corner']) 
+    left_lon_corner_str = lon_str(d['left_lon_corner'])
     grid = '_'.join(['latlon',d['grid_type'],left_lon_corner_str])
     src_grids.append(grid)
     fname = regrid.grid_file(grid)
@@ -64,7 +84,7 @@ for d in latlon_grids:
         print('grid_name = %s'%grid)
         d.update({'grid_out_fname' : fname})
         ok = regrid.gen_latlon_grid_file(**d)
-    
+
 #------------------------------------------------
 #--- make weights files
 #------------------------------------------------
@@ -81,11 +101,11 @@ for src_grid in src_grids:
             wgtFile = regrid.wgt_file(src_grid,dst_grid,interp_method)
             srcGridFile = regrid.grid_file(src_grid)
             dstGridFile = regrid.grid_file(dst_grid)
-            
+
             if not os.path.exists(wgtFile) or clobber:
                 ok = regrid.gen_weight_file(wgtFile = wgtFile,
                                             srcGridFile = srcGridFile,
                                             dstGridFile = dstGridFile,
                                             InterpMethod = interp_method)
-                
+
 print

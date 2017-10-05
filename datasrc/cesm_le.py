@@ -132,7 +132,7 @@ if __name__ == '__main__':
         #-- find the files and either link or stage for transfer
         files_to_get = []
         for cmpnt,vardef in component.items():
-
+            
             #-- set the variable list and reference variable
             varlist = vardef['varlist']
             refvar = vardef['refvar']

@@ -209,7 +209,6 @@ begin
          var_out!(var_out_rank-2) = "nlat"
          var_out!(var_out_rank-1) = "nlon"
       end if
-
       if (time_coordname .eq. "none") then
          debug_print("calling regrid_var_depth_single_time, time_ind = ", -1, opt)
          regrid_var_depth_single_time(var_lateral_regrid, var_out, opt)
@@ -236,6 +235,11 @@ begin
          print("postfill_opt = "+opt@postfill_opt+" only supported for dst_grid_type=POP")
          status_exit(1)
       end if
+   end if
+
+   if (dst_grid_type .eq. "rectilinear") then
+     var_out!(var_out_rank-2) = "lat"
+     var_out!(var_out_rank-1) = "lon"
    end if
 
    ;

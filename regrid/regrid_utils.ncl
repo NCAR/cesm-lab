@@ -28,12 +28,12 @@ begin
    ;
    ; construct yc and xc arrays for varname
    ;
-   if (src_grid_type .eq. "latlon") then
+   if (src_grid_type .eq. "latlon" .or. src_grid_type .eq. "rectilinear") then
        vardims = getfilevardims(f, varname)
        rank = dimsizes(vardims)
        y = f->$vardims(rank-2)$
        x = f->$vardims(rank-1)$
-       x = where(x .gt. 180., x - 360., x)
+       x = where(x .ge. 180., x - 360., x)
        yc_var = ndtooned(conform_dims((/ dimsizes(y), dimsizes(x) /), y, 0))
        xc_var = ndtooned(conform_dims((/ dimsizes(y), dimsizes(x) /), x, 1))
    else if (src_grid_type .eq. "POP") then

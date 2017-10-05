@@ -12,13 +12,13 @@ debug = True
 nmol_to_Pmol = 1e-9 * 1e-15
 nmols_to_Tmolyr = 1e-9 * 1e-12 * 86400. * 365.
 
+rmask_file = '/glade/p/work/mclong/grids/PacAtlInd_REGION_MASK_gx1v6.nc'
 
 tmpdir = os.environ['TMPDIR']
 
-time_chunks = 5 * 12 # read data in 5 year chunks
+#time_chunks = 5 * 12 # read data in 5 year chunks
+#    'chunks' : time_chunks,
 xr_open_dataset = {
-    'chunks':{'time' : time_chunks},
-    'mask_and_scale' : True,
     'decode_times' : False,
     'decode_coords': False}
 
@@ -28,13 +28,11 @@ xr_open_dataset = {
 class timer(object):
     def __init__(self, name=None):
         self.name = name
-
     def __enter__(self):
         self.tstart = time.time()
-
-    def __exit__(self, type, value, traceback):
         if self.name:
             print '[%s]' % self.name,
+    def __exit__(self, type, value, traceback):
         print 'Elapsed: %s' % (time.time() - self.tstart)
 
 #------------------------------------------------------------
@@ -47,34 +45,25 @@ def json_cmd(kwargs_dict):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
-def pop_calc_zonal_mean(ds):
+def pop_calc_zonal_mean(file_in,file_out):
     '''
     compute zonal mean of POP field
     in lieau of wrapping klindsay's zon_avg program so as to operate on
     an `xarray` dataset: write to file, compute, read back.
     '''
+    from subprocess import call
 
     print('computing zonal mean')
     za = '/glade/u/home/klindsay/bin/za'
-    rmask_file = '/glade/p/work/mclong/grids/PacAtlInd_REGION_MASK_gx1v6.nc'
-
-    _,za_file_in = tempfile.mkstemp('.nc','pop_calc_zonal_mean')
-    _,za_file_out = tempfile.mkstemp('.nc','pop_calc_zonal_mean')
-
-    #-- write input dataset to file_in
-    ds.to_netcdf(za_file_in,unlimited_dims='time')
 
     #-- run the za program
-    stat = call([za,'-rmask_file',rmask_file,'-o',za_file_out,za_file_in])
+    stat = call([za,'-rmask_file',rmask_file,'-o',file_out,file_in])
     if stat != 0:
         print('za failed')
         sys.exit(1)
 
     #-- read the dataset
-    ds = xr.open_dataset(za_file_out,**xr_open_dataset)
-    ds.load()
-
-    call(['rm','-f',za_file_out,za_file_in])
+    ds = xr.open_dataset(file_out,**xr_open_dataset)
 
     return ds
 
@@ -130,6 +119,41 @@ def pop_calc_global_mean(ds):
 
     return ds
 
+#------------------------------------------------------------
+#-- function
+#------------------------------------------------------------
+def pop_calc_area_mean(ds):
+    print('computing area mean')
+
+    area = ds.TAREA.values[None,:,:]
+
+    '''
+    rmask = xr.open_dataset(rmask_file,**xr_open_dataset)
+
+    if rmask.REGION_MASK.ndim == 2:
+        region = rmask.REGION_MASK.where(rmask.REGION_MASK!=0.).pipe(np.unique)
+        region = region[~np.isnan(region)]
+        nrgn = len(region)
+        mask3d = np.zeros((nrgn,)+rmask.REGION_MASK.shape)
+    else:
+        mask3d = rmask.REGION_MASK.values
+        nrgn = mask3d.shape[0]
+    '''
+    for variable in ds:
+        if not all([d in ds[variable].dims for d in ['time','nlat','nlon']]):
+            continue
+
+        attrs = ds[variable].attrs
+        convert = 1.0
+        if 'units' in attrs:
+            new_units = attrs['units']+' cm^2'
+
+        ds[variable] = (ds[variable] * area * convert).sum(dim=['nlat','nlon'])
+        ds[variable].attrs = attrs
+        if 'units' in attrs:
+            ds[variable].attrs['units'] = new_units
+
+    return ds
 
 #------------------------------------------------------------
 #-- function
@@ -222,38 +246,93 @@ def pop_total_ocean_volume(ds):
 #----------------------------------------------------------------
 #-- function
 #----------------------------------------------------------------
-def apply_drift_correction(variable,ds_ctrl,ds_list,file_out_list=[]):
+def apply_drift_correction_ann(variable,file_ctrl,file_drift,
+                               file_in_list,file_out_list):
 
-    if file_out_list:
-        if len(file_out_list) != len(ds_list):
-            print('File out list does not match ds_list')
-            sys.exit(1)
+    if len(file_out_list) != len(file_in_list):
+        print('File out list does not match file_in_list')
+        sys.exit(1)
+
+    if all([os.path.exists(f) for f in file_out_list]):
+        return
 
     #-- make time vector
-    nt = len(ds_ctrl.time)
-    x = np.arange(0,nt,1)
+    with timer('computing control drift'):
 
-    #-- read data
-    y = ds_ctrl[variable].values.reshape((nt,-1))
+        if not os.path.exists(file_drift):
+            #-- open dataset
+            dsc = xr.open_dataset(file_ctrl,**xr_open_dataset)
 
-    # compute regression coeff
-    beta = np.polyfit(x,y,1)
+            #-- generate dummy axis
+            nt = len(dsc.time)
+            x = np.arange(0,nt,1)
 
-    #-- compute drift
-    drift = (beta[0,:] * x[:,None]).reshape(ds_ctrl[variable].shape)
+            #-- read data
+            y = dsc[variable].values.reshape((nt,-1))
 
-    for i,ds in enumerate(ds_list):
-        ds_list[i][variable].values = ds[variable].values - drift
+            # compute regression coeff
+            beta = np.polyfit(x,y,1)
 
-    if file_out_list:
-        for i,f in enumerate(file_out_list):
-            ds_list[i].to_netcdf(f,unlimited_dims='time')
+            #-- compute drift
+            drift = (beta[0,:] * x[:,None]).reshape(dsc[variable].shape)
+            dsc[variable+'_drift_corr'] = dsc[variable].copy()
+            dsc[variable+'_drift_corr'].values = drift
+            dsc.to_netcdf(file_drift,unlimited_dims='time')
+        else:
+            dsc = xr.open_dataset(file_drift,**xr_open_dataset)
 
-    return ds_list
+        yearc = dsc.year.values
+
+    for file_in,file_out in zip(file_in_list,file_out_list):
+        with timer('drift correcting: %s'%file_in):
+            if not os.path.exists(file_out):
+                ds = xr.open_dataset(file_in,**xr_open_dataset)
+                year = ds.year.values
+                slc = slice(np.where(year[0]==yearc)[0][0],
+                            np.where(year[-1]==yearc)[0][-1]+1)
+                print slc
+                print yearc[slc]
+
+                #-- subtract the drift
+                ds[variable].values = ds[variable].values - \
+                    dsc[variable+'_drift_corr'].values[slc,:]
+                ds.to_netcdf(file_out,unlimited_dims='time')
 
 #----------------------------------------------------------------
 #-- function
 #----------------------------------------------------------------
+
+def ensemble_mean_std(file_in_list,file_out_avg,file_out_std):
+    dse = xr.open_mfdataset(file_in_list,
+                            concat_dim='ens',
+                            **xr_open_dataset)
+
+    dseo = dse.mean(dim='ens')
+    dseo.to_netcdf(file_out_avg,unlimited_dims='time')
+
+    dseo = dse.std(dim='ens')
+    dseo.to_netcdf(file_out_std,unlimited_dims='time')
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def transform_file(file_in,file_out,transform_func):
+    ds = xr.open_dataset(file_in,**xr_open_dataset)
+
+    if hasattr(transform_func,'__iter__'):
+        for tfunc in transform_func:
+            ds = tfunc(ds)
+    else:
+        dsi = transform_func(ds)
+
+    ds.to_netcdf(file_out,unlimited_dims='time')
+
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
 def tseries_dataset(case_files, yr0,
                     file_out = '',
                     year_range = None,
@@ -375,6 +454,16 @@ class hfile(object):
         '''
         return self.__str__()
 
+    def _check_args(self,**kwargs):
+        '''Private method: check that kwargs are defined fields.
+        '''
+        valid = [kw in self._parts.keys() for kw in kwargs.keys()]
+        if not all(valid):
+            raise AttributeError('%s has no attribute(s): %s'%
+                                 (self.__class__.__name__,
+                                 str([kwargs.keys()[i]
+                                      for i,k in enumerate(valid) if not k])))
+
     def copy(self):
         '''Return a copy.
         '''
@@ -387,6 +476,7 @@ class hfile(object):
         self._check_args(**kwargs)
         for key,value in kwargs.items():
             self._parts[key] = '_'.join([self._parts[key],value])
+        return self
 
     def prepend(self,**kwargs):
         '''Prepend a filename part with string.
@@ -394,29 +484,24 @@ class hfile(object):
         self._check_args(**kwargs)
         for key,value in kwargs.items():
             self._parts[key] = '_'.join([value,self._parts[key]])
+        return self
 
     def update(self,**kwargs):
         '''Change file name parts.
         '''
         self._check_args(**kwargs)
         self._parts.update(**kwargs)
+        return self
 
     def exists(self):
         '''Check if file exists on disk.
         '''
         return os.path.exists(self())
 
-    def _check_args(self,**kwargs):
-        '''Private method: check that kwargs are defined fields.
-        '''
-        valid = [kw in self._parts.keys() for kw in kwargs.keys()]
-        if not all(valid):
-            raise AttributeError('%s has no attribute(s): %s'%
-                                 (self.__class__.__name__,
-                                 str([kwargs.keys()[i]
-                                      for i,k in enumerate(valid) if not k])))
 
-
+#-------------------------------------------------------------------------------
+#--- main
+#-------------------------------------------------------------------------------
 if __name__ == '__main__':
     import argparse
     import json
