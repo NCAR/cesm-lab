@@ -55,6 +55,8 @@ begin
    ; verify that yc_var and xc_var agree with yc_a and xc_a from wgtFile
    ;
    mismatch = False
+   print("dims yc_var: "+dimsizes(yc_var))
+   print("dims yc_a: "+dimsizes(yc_a)) 
    if (any(abs(yc_var - yc_a) .gt. 1e-5)) then
       print("yc_a mismatch for "+varname)
       print("src_grid = "+opt@src_grid)

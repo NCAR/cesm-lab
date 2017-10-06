@@ -249,10 +249,16 @@ begin
       system("rm -f "+fname_out)
       f_out = addfile(fname_out, "c")
 
+      ; make time dim unlimited (help with large vars?)
+      if (time_coordname .ne. "none") then
+        filedimdef(f_out,time_coordname,-1,True)
+      end if
+
       ; add dst_grid specific grid info
       if (dst_grid_type .eq. "POP") then
          append_POP_grid_vars(f_out, f_wgtFile@grid_file_dst)
       end if
+
    end if
 
    if (opt@outfile_opt .eq. "append") then
