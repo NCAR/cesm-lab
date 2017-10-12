@@ -97,6 +97,7 @@ def tseries_files(caselist,component,freq,variable,rootdir=vroot):
                 print('no files for case: '+str(case))
                 return None
             case_files.extend(glob_res)
+
         file_list.append(case_files)
 
     return file_list
@@ -112,7 +113,15 @@ if __name__ == '__main__':
                           'varlist' : ['O2','AOU','O2SAT','STF_O2','TEMP','O2_CONSUMPTION',
                                        'O2_PRODUCTION','PD','IAGE','FG_CO2','SHF','QFLUX',
                                        'XMXL','HMXL','IAGE','SALT','DIC',
-                                       'PO4']}}
+                                       'PO4','TEMP','SALT','PO4','NO3','SiO3','NH4',
+                                       'Fe','O2','DIC','DIC_ALT_CO2','ALK',
+                                       'ALK_ALT_CO2','DOC','DON','DOP','zooC',
+                                       'spChl','spC','spP','spFe','spCaCO3','diatChl',
+                                       'diatC','diatP','diatFe',
+                                       'diatSi','diazChl','diazC','diazP','diazFe']}
+                 }
+
+
     freq = 'monthly'
 
     for sim in ['LE','ME']:
@@ -132,7 +141,7 @@ if __name__ == '__main__':
         #-- find the files and either link or stage for transfer
         files_to_get = []
         for cmpnt,vardef in component.items():
-            
+
             #-- set the variable list and reference variable
             varlist = vardef['varlist']
             refvar = vardef['refvar']
@@ -173,14 +182,18 @@ if __name__ == '__main__':
 
             #-- transfer missing files from tape
             for f in files_to_get:
+
                 odir = os.path.dirname(f).replace(droot,vroot)
                 if not os.path.exists(odir):
                     call(['mkdir','-pv',odir])
+
                 lfile = f.replace(droot,vroot)
                 hfile = f.replace(droot,hroot)
+
                 cmd = ['hsi','cget '+lfile+' : '+hfile]
                 print cmd
                 stat = call(cmd)
                 if stat != 0:
                     print('file transfer failed')
-                    sys.exit(1)
+                    print('')
+                    #sys.exit(1)

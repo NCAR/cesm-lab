@@ -70,6 +70,38 @@ def pop_calc_zonal_mean(file_in,file_out):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
+
+def pop_calc_vertical_integral(ds):
+    gridvar = [k for k in ds if 'time' not in ds[k].dims]
+    timevar = [k for k in ds if 'time' in ds[k].dims]
+
+    dsg = ds.drop(timevar)
+    ds = ds.drop(gridvar)
+
+    for variable in ds.keys():
+        if not any(d in ds[variable].dims for d in ['z_t','z_t_150m']):
+            continue
+
+        attrs = ds[variable].attrs
+        new_units = ds[variable].attrs['units']+' cm'
+
+        if 'z_t' in ds[variable].dims:
+            ds[variable] = (ds[variable] * dsg.dz).sum(dim='z_t')
+
+        elif 'z_t_150m' in ds[variable].dims:
+            ds[variable] = (ds[variable] * dsg.dz[0:15]).sum(dim='z_t_150m')
+
+        ds[variable].attrs = attrs
+        ds[variable].attrs['units'] = new_units
+
+    ds = xr.merge((ds,dsg))
+
+    return ds
+
+#------------------------------------------------------------
+#-- function
+#------------------------------------------------------------
+
 def pop_calc_global_mean(ds):
     print('computing global mean')
 
@@ -122,6 +154,7 @@ def pop_calc_global_mean(ds):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
+
 def pop_calc_area_mean(ds):
     print('computing area mean')
 
@@ -158,6 +191,7 @@ def pop_calc_area_mean(ds):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
+
 def calc_ann_mean(ds):
     time_dimname = 'time'
 
@@ -234,13 +268,18 @@ def calc_ann_mean(ds):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
-def pop_total_ocean_volume(ds):
+def pop_ocean_volume(ds):
+    dso = ds.copy().drop([k for k in ds
+                          if 'time' in ds[k].dims])
+
     vol_values = ds.TAREA.values[None,:,:] * ds.dz.values[:,None,None]
     for j in range(len(ds.nlat)):
         for i in range(len(ds.nlon)):
             k = ds.KMT.values[j,i].astype(int)
             vol_values[k:,j,i] = 0.
-    return vol_values.sum()
+
+    dso['VOL'] = xr.DataArray(vol_values,dims=('z_t','nlat','nlon'))
+    return dso
 
 
 #----------------------------------------------------------------
