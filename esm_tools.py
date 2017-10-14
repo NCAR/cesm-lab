@@ -103,63 +103,16 @@ def pop_calc_vertical_integral(ds):
 #------------------------------------------------------------
 
 def pop_calc_global_mean(ds):
-    print('computing global mean')
-
-    need_vol = False
-    for variable in ds:
-        if ds[variable].dims == ('time','z_t','nlat','nlon'):
-            need_vol = True
-            break
-
-    area = ds.TAREA.values[None,:,:]
-    if need_vol:
-        with timer('computing vol array'):
-            vol_values = ds.TAREA.values[None,:,:] * ds.dz.values[:,None,None]
-            vol = xr.DataArray(vol_values,dims=('z_t','nlat','nlon'))
-
-    for variable in ds:
-        if ds[variable].dims == ('time','z_t','nlat','nlon'):
-            with timer('computing volume-weighted integral %s'%variable):
-                attrs = ds[variable].attrs
-                convert = 1.0
-                new_units = ds[variable].attrs['units']+' cm^3'
-
-                if variable == 'O2':
-                    convert = nmol_to_Pmol
-                    new_units = 'Pmol'
-                elif any([variable == v for v in ['O2_CONSUMPTION','O2_PRODUCTION']]):
-                    convert = nmols_to_Tmolyr
-                    new_units = 'Tmol yr$^{-1}$'
-
-                ds[variable] = (ds[variable] * vol * convert).sum(dim=['z_t','nlat','nlon'])
-                ds[variable].attrs = attrs
-                ds[variable].attrs['units'] = new_units
-
-        elif ds[variable].dims == ('time','nlat','nlon'):
-            with timer('computing area-weighted integral %s'%variable):
-                attrs = ds[variable].attrs
-                convert = 1.0
-                new_units = ds[variable].attrs['units']+' cm^2'
-
-                if variable == 'STF_O2':
-                    convert = nmols_to_Tmolyr
-                    new_units = 'Tmol yr$^{-1}$'
-
-                ds[variable] = (ds[variable] * area * convert).sum(dim=['nlat','nlon'])
-                ds[variable].attrs = attrs
-                ds[variable].attrs['units'] = new_units
-
+    ds = pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'])
     return ds
 
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
 
-def pop_calc_area_mean(ds):
-    print('computing area mean')
+def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon']):
 
-    area = ds.TAREA.values[None,:,:]
-
+    # TODO: add masking capability
     '''
     rmask = xr.open_dataset(rmask_file,**xr_open_dataset)
 
@@ -172,20 +125,45 @@ def pop_calc_area_mean(ds):
         mask3d = rmask.REGION_MASK.values
         nrgn = mask3d.shape[0]
     '''
+
+    vol_wgt = []
+    area_wgt = []
     for variable in ds:
         if not all([d in ds[variable].dims for d in ['time','nlat','nlon']]):
             continue
 
         attrs = ds[variable].attrs
-        convert = 1.0
-        if 'units' in attrs:
-            new_units = attrs['units']+' cm^2'
 
-        ds[variable] = (ds[variable] * area * convert).sum(dim=['nlat','nlon'])
+        avg_over_dims_v = [k for k in avg_over_dims if k in ds[variable].dims]
+
+        #-- 3D vars
+        if ds[variable].dims == ('time','z_t','nlat','nlon'):
+            if not vol_wgt:
+                dsv = pop_ocean_volume(ds)
+                ds['vol_sum'] = dsv.VOL.sum(dim=avg_over_dims_v)
+                ds.vol_sum.attrs['units'] = 'cm^3'
+                vol_wgt = dsv.VOL / ds.vol_sum
+
+            ds[variable] = (ds[variable] * vol_wgt).sum(dim=avg_over_dims_v)
+
+        #-- 2D vars
+        elif ds[variable].dims == ('time','nlat','nlon'):
+            if not area_wgt:
+                ds['area_sum'] = ds.TAREA.where(ds.KMT > 0).sum(avg_over_dims_v)
+                ds.area_sum.attrs['units'] = 'cm^2'
+                area_wgt = ds['TAREA'] / ds.area_sum
+            ds[variable] = (ds[variable] * ds.TAREA).sum(dim=avg_over_dims_v)
+
         ds[variable].attrs = attrs
-        if 'units' in attrs:
-            ds[variable].attrs['units'] = new_units
 
+    return ds
+
+#------------------------------------------------------------
+#-- function
+#------------------------------------------------------------
+
+def pop_calc_area_mean(ds):
+    ds = pop_calc_spatial_mean(ds,avg_over_dims=['nlat','nlon'])
     return ds
 
 #------------------------------------------------------------
@@ -268,19 +246,18 @@ def calc_ann_mean(ds):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
+
 def pop_ocean_volume(ds):
     dso = ds.copy().drop([k for k in ds
                           if 'time' in ds[k].dims])
 
-    vol_values = ds.TAREA.values[None,:,:] * ds.dz.values[:,None,None]
+    dso['VOL'] = ds.dz * ds.TAREA
     for j in range(len(ds.nlat)):
         for i in range(len(ds.nlon)):
             k = ds.KMT.values[j,i].astype(int)
-            vol_values[k:,j,i] = 0.
+            dso.VOL.values[k:,j,i] = 0.
 
-    dso['VOL'] = xr.DataArray(vol_values,dims=('z_t','nlat','nlon'))
     return dso
-
 
 #----------------------------------------------------------------
 #-- function
