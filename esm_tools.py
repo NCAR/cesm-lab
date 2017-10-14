@@ -9,8 +9,6 @@ import tempfile
 import json
 
 debug = True
-nmol_to_Pmol = 1e-9 * 1e-15
-nmols_to_Tmolyr = 1e-9 * 1e-12 * 86400. * 365.
 
 rmask_file = '/glade/p/work/mclong/grids/PacAtlInd_REGION_MASK_gx1v6.nc'
 
