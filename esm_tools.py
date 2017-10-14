@@ -390,7 +390,11 @@ def select_by_year(ds,year_range):
     ds = ds.isel(time=slice(nx[0],nx[-1]+1))
     return ds
 
-def require_variables(req_var):
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def require_variables(ds,req_var):
     missing_var_error = False
     for v in req_var:
         if v not in ds:
@@ -405,7 +409,7 @@ def require_variables(req_var):
 #----------------------------------------------------------------
 
 def pop_derive_var_OUR(ds):
-    require_variables(['AOU','IAGE'])
+    require_variables(ds,['AOU','IAGE'])
 
     ds['IAGE'] = ds.IAGE.where(ds.IAGE>0)
     ds['OUR'] = ds.AOU / ds.IAGE
@@ -422,13 +426,13 @@ def pop_derive_var_OUR(ds):
 
 def pop_derive_var_NPP(ds):
 
-    require_variables(['photoC_sp','photoC_diat','photoC_diaz'])
+    require_variables(ds,['photoC_sp','photoC_diat','photoC_diaz'])
 
     ds['NPP'] = ds.photoC_sp + ds.photoC_diat + ds.photoC_diaz
     ds.NPP.attrs['units'] = ds.photoC_sp.attrs['units']
     ds.NPP.attrs['long_name'] = 'NPP'
     ds = ds.drop(['photoC_sp','photoC_diat','photoC_diaz'])
-    
+
     return ds
 
 #----------------------------------------------------------------
