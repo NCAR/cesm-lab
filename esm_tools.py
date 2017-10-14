@@ -331,14 +331,14 @@ def ensemble_mean_std(file_in_list,file_out_avg,file_out_std):
 #-- function
 #----------------------------------------------------------------
 
-def transform_file(file_in,file_out,transform_func):
+def transform_file(file_in,file_out,preprocess):
     ds = xr.open_dataset(file_in,**xr_open_dataset)
 
-    if hasattr(transform_func,'__iter__'):
-        for tfunc in transform_func:
+    if hasattr(preprocess,'__iter__'):
+        for tfunc in preprocess:
             ds = tfunc(ds)
     else:
-        dsi = transform_func(ds)
+        dsi = preprocess(ds)
 
     ds.to_netcdf(file_out,unlimited_dims='time')
 
@@ -347,85 +347,180 @@ def transform_file(file_in,file_out,transform_func):
 #-- function
 #----------------------------------------------------------------
 
-def tseries_dataset(case_files, yr0,
-                    file_out = '',
-                    year_range = None,
-                    transform_func = None):
-
-    #-- loop over cases and get datasets
+def debug_print(msg=''):
     if debug:
-        print
-        print('-'*80)
-        print(case_files)
+        print(msg)
 
-    #-- make files into xarray datasets
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def interpret_time(ds,year_offset):
+    cdftime = utime(ds.time.attrs['units'],
+                    calendar=ds.time.attrs['calendar'])
+    ds['year'] = ds.time.copy()
+    ds.year.attrs = {}
+    ds.year.values = np.array([d.year+year_offset
+                               for d in cdftime.num2date(ds.time-1./86400.)])
+
+    ds['yearfrac'] = ds.time.copy()
+    ds.yearfrac.attrs = {}
+    ds.yearfrac.values = np.array([d.year+year_offset+d.day/365.
+                                   for d in cdftime.num2date(ds.time-1./86400.)])
+
+    ds['month'] = ds.time.copy()
+    ds.month.attrs = {}
+    ds.month.values = np.array([d.month
+                                for d in cdftime.num2date(ds.time-1./86400.)])
+    return ds
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def select_by_year(ds,year_range):
+    if year_range is None:
+        return ds
+
+    year = ds.year.values
+    nx = np.where((year_range[0] <= year) & (year <= year_range[-1]))[0]
+    if len(nx) == 0:
+        return None
+
+    ds = ds.isel(time=slice(nx[0],nx[-1]+1))
+    return ds
+
+def require_variables(req_var):
+    missing_var_error = False
+    for v in req_var:
+        if v not in ds:
+            print('Missing required variable: %s'%v)
+            missing_var_error = True
+
+    if missing_var_error:
+        sys.exit(1)
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def pop_derive_var_OUR(ds):
+    require_variables(['AOU','IAGE'])
+
+    ds['IAGE'] = ds.IAGE.where(ds.IAGE>0)
+    ds['OUR'] = ds.AOU / ds.IAGE
+    ds.OUR.attrs['units'] = ds.AOU.attrs['units']+'/'+ds.IAGE.attrs['units']
+    ds.OUR.attrs['long_name'] = 'OUR'
+
+    ds = ds.drop(['AOU','IAGE'])
+
+    return ds
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def pop_derive_var_NPP(ds):
+
+    require_variables(['photoC_sp','photoC_diat','photoC_diaz'])
+
+    ds['NPP'] = ds.photoC_sp + ds.photoC_diat + ds.photoC_diaz
+    ds.NPP.attrs['units'] = ds.photoC_sp.attrs['units']
+    ds.NPP.attrs['long_name'] = 'NPP'
+    ds = ds.drop(['photoC_sp','photoC_diat','photoC_diaz'])
+    
+    return ds
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def open_tsdataset(paths,
+                   year_offset = 0,
+                   file_out = '',
+                   year_range = None,
+                   preprocess = [],
+                   preprocess_kwargs = []):
+    '''Open multiple timeseries files as a single dataset.
+
+    Read and concatenate multiple files a single dataset.
+
+    Parameters
+    ----------
+    paths : list or dict
+       open and concatenate or, if a list of dictionaries
+       open, merge, and then concatenate.
+    year_offset : int, optional
+       year to add to base year to align calendar.
+    year_range : [int,int], optional
+       pick only data in this range
+    preprocess : callable or list of callable, optional
+       transform dataset with this function
+    preprocess_kwargs : dict
+       arguments to pass to preprocess.
+
+    Returns
+    -------
+    xarray.Datasets
+
+    '''
+
+    #-- add some default operations
+    preprocess_def = [interpret_time,select_by_year]
+    preprocess_kwargs_def = [{'year_offset':year_offset},
+                             {'year_range':year_range}]
+    if preprocess:
+        if not isinstance(preprocess,list):
+            preprocess = [preprocess]
+
+        if preprocess_kwargs:
+            if not isinstance(preprocess_kwargs,list):
+                preprocess_kwargs = [preprocess_kwargs]
+        else:
+            preprocess_kwargs = [{}]*len(preprocess)
+
+        if len(preprocess) != len(preprocess_kwargs):
+            print('ERROR: len(preprocess) != len(preprocess_kwargs)')
+            sys.exit(1)
+
+        preprocess = preprocess_def+preprocess
+        preprocess_kwargs = preprocess_kwargs_def+preprocess_kwargs
+
+    #-- loop over paths
     dsi = []
-    for f in case_files:
-        if debug:
-            print('opening %s'%f)
-        dsii = xr.open_dataset(f,**xr_open_dataset)
+    if isinstance(paths,dict):
+        paths_iter = zip(*paths.values())
+    else:
+        paths_iter = paths
 
-        cdftime = utime(dsii.time.attrs['units'],
-                        calendar=dsii.time.attrs['calendar'])
+    for path_i in paths_iter:
 
+        #-- if iterable, do a merge
+        if hasattr(path_i,'__iter__'):
+            dsii = {}
+            for path_ii in path_i:
+                dsiii = xr.open_dataset(path_ii,**xr_open_dataset)
+                if not dsii:
+                    dsii = dsiii
+                else:
+                    dsii = xr.merge((dsii,dsiii))
+        else:
+            dsii = xr.open_dataset(path_i,**xr_open_dataset)
 
-        if year_range is not None:
-            if debug:
-                print('apply year_range to %s:'%f)
-                print(year_range)
+        #-- apply preprocess functions
+        for func,kwargs in zip(preprocess,preprocess_kwargs):
+            dsii = func(dsii,**kwargs)
+            if dsii is None: break
 
-            year = np.array([d.year+yr0
-                             for d in cdftime.num2date(dsii.time-1./86400.)])
-            if debug:
-                print('years = %d - %d'%(year[0],year[-1]))
-
-            nx = np.where((year_range[0] <= year) & (year <= year_range[-1]))[0]
-            if len(nx) == 0:
-                if debug:
-                    print('no dates found in range')
-                    print
-                continue
-
-            if debug:
-                print('time index = %s'%str(slice(nx[0],nx[-1]+1)))
-            dsii = dsii.isel(time=slice(nx[0],nx[-1]+1))
-
-            if debug:
-                print('subsetted dates:')
-                print(cdftime.num2date(dsii.time[0]))
-                print(cdftime.num2date(dsii.time[-1]))
-                print
-
-        dsii['year'] = dsii.time.copy()
-        dsii.year.attrs = {}
-        dsii.year.values = np.array([d.year+yr0
-                                     for d in cdftime.num2date(dsii.time-1./86400.)])
-
-        dsii['yearfrac'] = dsii.time.copy()
-        dsii.yearfrac.attrs = {}
-        dsii.yearfrac.values = np.array([d.year+yr0+d.day/365.
-                                         for d in cdftime.num2date(dsii.time-1./86400.)])
-
-        dsii['month'] = dsii.time.copy()
-        dsii.month.attrs = {}
-        dsii.month.values = np.array([d.month
-                                      for d in cdftime.num2date(dsii.time-1./86400.)])
-
-        if transform_func is not None:
-            if debug:
-                print('transforming data')
-            if hasattr(transform_func,'__iter__'):
-                for tfunc in transform_func:
-                    dsii = tfunc(dsii)
-            else:
-                dsii = transform_func(dsii)
-
+        if dsii is None: continue
         dsi.append(dsii)
 
     #-- concatenate
-    if len(dsi) > 1:
+    if not dsi:
+        return None
+    elif len(dsi) > 1:
         dsi = xr.concat(dsi,dim='time',data_vars='minimal')
-    elif len(dsi) > 0:
+    else:
         dsi = dsi[0]
 
     if file_out and dsi:
@@ -558,13 +653,13 @@ if __name__ == '__main__':
 
     #-- this is ugly
     task_function = eval(control['task'])
-    if 'transform_func' in control['kwargs']:
-        transform_func = control['kwargs']['transform_func']
-        if hasattr(transform_func,'__iter__'):
-            for i,func in enumerate(transform_func):
-                transform_func[i] = eval(func)
+    if 'preprocess' in control['kwargs']:
+        preprocess = control['kwargs']['preprocess']
+        if hasattr(preprocess,'__iter__'):
+            for i,func in enumerate(preprocess):
+                preprocess[i] = eval(func)
         else:
-            transform_func = eval(transform_func)
+            preprocess = eval(preprocess)
 
     print control
     task_function(**control['kwargs'])
