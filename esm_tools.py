@@ -312,6 +312,53 @@ def apply_drift_correction_ann(variable,file_ctrl,file_drift,
                     dsc[variable+'_drift_corr'].values[slc,:]
                 ds.to_netcdf(file_out,unlimited_dims='time')
 
+#------------------------------------------------------------
+#-- function
+#------------------------------------------------------------
+
+def calc_mean(ds,dim=[],dimsub={}):
+    if dimsub:
+        for k,v in dimsub.items():
+            dimsub[k] = slice(v[0],v[-1])
+        ds = ds.isel(**dimsub)
+
+    kwargs = {'keep_attrs':True}
+    if dim:
+        kwargs.update({'dim':dim})
+
+    return ds.mean(**kwargs)
+
+
+#------------------------------------------------------------
+#-- function
+#------------------------------------------------------------
+
+def calc_binary_op(ds,file_in,operation):
+
+    ds2 = xr.open_dataset(file_in,**xr_open_dataset)
+
+    time_vars = [k for k in ds.keys() if 'time' in ds[k].dims]
+    grid_vars = [k for k in ds.keys() if 'time' not in ds[k].dims]
+    attrs = {k:ds[k].attrs for k in time_vars}
+
+    dsg = ds.drop(time_vars)
+    ds = ds.drop(grid_vars)
+    ds2 = ds2.drop(grid_vars)
+
+    if 'add' in operation:
+        ds = ds + ds2
+    elif 'subtract' in operation:
+        ds = ds - ds2
+    elif 'mult' in operation:
+        ds = ds * ds2
+    elif 'div' in operation:
+        ds = ds / ds2
+
+    for k in time_vars:
+        ds[k].attrs = attrs[k]
+        
+    return xr.merge((ds,dsg))
+
 #----------------------------------------------------------------
 #-- function
 #----------------------------------------------------------------
@@ -331,14 +378,20 @@ def ensemble_mean_std(file_in_list,file_out_avg,file_out_std):
 #-- function
 #----------------------------------------------------------------
 
-def transform_file(file_in,file_out,preprocess):
+def transform_file(file_in,file_out,preprocess,preprocess_kwargs={}):
+    if not isinstance(preprocess,list):
+        preprocess = [preprocess]
+
+    if preprocess_kwargs:
+        if not isinstance(preprocess_kwargs,list):
+            preprocess_kwargs = [preprocess_kwargs]
+    else:
+        preprocess_kwargs = [{}]*len(preprocess)
+
     ds = xr.open_dataset(file_in,**xr_open_dataset)
 
-    if hasattr(preprocess,'__iter__'):
-        for tfunc in preprocess:
-            ds = tfunc(ds)
-    else:
-        dsi = preprocess(ds)
+    for func,kwargs in zip(preprocess,preprocess_kwargs):
+        ds = func(ds,**kwargs)
 
     ds.to_netcdf(file_out,unlimited_dims='time')
 
