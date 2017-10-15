@@ -411,7 +411,7 @@ def require_variables(ds,req_var):
 def pop_derive_var_OUR(ds):
     require_variables(ds,['AOU','IAGE'])
 
-    ds['IAGE'] = ds.IAGE.where(ds.IAGE>0)
+    ds['IAGE'] = ds.IAGE.where(ds.IAGE>0.25)
     ds['OUR'] = ds.AOU / ds.IAGE
     ds.OUR.attrs['units'] = ds.AOU.attrs['units']+'/'+ds.IAGE.attrs['units']
     ds.OUR.attrs['long_name'] = 'OUR'
@@ -543,6 +543,21 @@ class hfile(object):
 
         Kwargs:
         fields in the dictionary
+        dirname : str, optional
+          the directory name
+        prefix : str, optional
+          first part of filename, like the casename.
+        stream : str, optional
+          sub-designation like output the stream.
+        ens : str, optional
+           ensemble number
+        op : str, optional
+          third part of filename, an operation that has been performed on file.
+        varname : str
+          can include colon delimination for derived vars:
+             varname:dependent_var_list
+          the `dependent_var_list` is a comma delimited list of variables from
+          which the variable `varname` is constructed.
         '''
         from collections import OrderedDict
         self._parts = OrderedDict([('dirname',''),
@@ -603,6 +618,8 @@ class hfile(object):
         '''Change file name parts.
         '''
         self._check_args(**kwargs)
+        if 'varname' in kwargs:
+            kwargs['varname'] = kwargs['varname'].split(':')[0]
         self._parts.update(**kwargs)
         return self
 
