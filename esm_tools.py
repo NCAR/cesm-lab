@@ -356,8 +356,17 @@ def calc_binary_op(ds,file_in,operation):
 
     for k in time_vars:
         ds[k].attrs = attrs[k]
-        
+
     return xr.merge((ds,dsg))
+
+#-------------------------------------------------------------------------------
+#-- function
+#-------------------------------------------------------------------------------
+
+def dimension_subset(ds,sel={},isel={}):
+    if isel: ds = ds.isel(**isel)
+    if sel:  ds = ds.sel(**sel)
+    return ds
 
 #----------------------------------------------------------------
 #-- function
