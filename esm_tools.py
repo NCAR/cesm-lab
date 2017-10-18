@@ -568,6 +568,7 @@ def open_tsdataset(paths,
     preprocess_def = [interpret_time,select_by_year]
     preprocess_kwargs_def = [{'year_offset':year_offset},
                              {'year_range':year_range}]
+
     if varname is not None:
         preprocess_def.append(variable_subset)
         preprocess_kwargs_def.append({'varname':varname,'keep_grids_vars':True})
