@@ -43,6 +43,7 @@ def json_cmd(kwargs_dict):
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
+
 def pop_calc_zonal_mean(file_in,file_out):
     '''
     compute zonal mean of POP field
@@ -57,7 +58,7 @@ def pop_calc_zonal_mean(file_in,file_out):
     #-- run the za program
     stat = call([za,'-rmask_file',rmask_file,'-o',file_out,file_in])
     if stat != 0:
-        print('za failed')
+        print('ERROR: za failed')
         sys.exit(1)
 
     #-- read the dataset
@@ -168,8 +169,9 @@ def pop_calc_area_mean(ds):
 #-- function
 #------------------------------------------------------------
 
-def calc_ann_mean(ds):
+def calc_ann_mean(ds,sel={},isel={}):
     time_dimname = 'time'
+    ds = dimension_subset(ds,sel,isel)
 
     with timer('computing weights for annual means'):
         tb_name = ''
@@ -264,7 +266,7 @@ def apply_drift_correction_ann(variable,file_ctrl,file_drift,
                                file_in_list,file_out_list):
 
     if len(file_out_list) != len(file_in_list):
-        print('File out list does not match file_in_list')
+        print('ERROR: File out list does not match file_in_list')
         sys.exit(1)
 
     if all([os.path.exists(f) for f in file_out_list]):
@@ -316,11 +318,8 @@ def apply_drift_correction_ann(variable,file_ctrl,file_drift,
 #-- function
 #------------------------------------------------------------
 
-def calc_mean(ds,dim=[],dimsub={}):
-    if dimsub:
-        for k,v in dimsub.items():
-            dimsub[k] = slice(v[0],v[-1])
-        ds = ds.isel(**dimsub)
+def calc_mean(ds,dim=[],sel={},isel={}):
+    ds = dimension_subset(ds,sel,isel)
 
     kwargs = {'keep_attrs':True}
     if dim:
@@ -462,8 +461,20 @@ def require_variables(ds,req_var):
         if v not in ds:
             print('Missing required variable: %s'%v)
             missing_var_error = True
-
     if missing_var_error:
+        sys.exit(1)
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
+def pop_derive_var(ds,varname):
+    if varname == 'OUR':
+        return pop_derive_var_OUR(ds)
+    elif varname == 'NPP':
+        return pop_derive_var_NPP(ds)
+    else:
+        print('ERROR: unknown derived varname: %s'%varname)
         sys.exit(1)
 
 #----------------------------------------------------------------
@@ -501,9 +512,31 @@ def pop_derive_var_NPP(ds):
 #-- function
 #----------------------------------------------------------------
 
+def variable_subset(ds,varname,keep_grids_vars=True):
+    if not isinstance(varname,list):
+        varname = [varname]
+
+    keep_vars = ['time','year','yearfrac','month']
+    if 'bounds' in ds['time'].attrs:
+        keep_vars += [ds['time'].attrs['bounds']]
+    keep_vars += varname
+
+    grid_vars = [k for k in ds.keys() if 'time' not in ds[k].dims]
+    drop_vars = [k for k in ds.keys()
+                 if 'time' in ds[k].dims and k not in keep_vars]
+    if not keep_grids_vars:
+        drop_vars.extend(grid_vars)
+
+    return ds.drop(drop_vars)
+
+#----------------------------------------------------------------
+#-- function
+#----------------------------------------------------------------
+
 def open_tsdataset(paths,
                    year_offset = 0,
                    file_out = '',
+                   varname = None,
                    year_range = None,
                    preprocess = [],
                    preprocess_kwargs = []):
@@ -535,6 +568,11 @@ def open_tsdataset(paths,
     preprocess_def = [interpret_time,select_by_year]
     preprocess_kwargs_def = [{'year_offset':year_offset},
                              {'year_range':year_range}]
+
+    if varname is not None:
+        preprocess_def.append(variable_subset)
+        preprocess_kwargs_def.append({'varname':varname,'keep_grids_vars':True})
+
     if preprocess:
         if not isinstance(preprocess,list):
             preprocess = [preprocess]
@@ -564,7 +602,7 @@ def open_tsdataset(paths,
         #-- if iterable, do a merge
         if hasattr(path_i,'__iter__'):
             dsii = {}
-            for path_ii in path_i:
+            for path_ii in set(path_i):
                 dsiii = xr.open_dataset(path_ii,**xr_open_dataset)
                 if not dsii:
                     dsii = dsiii
@@ -731,7 +769,6 @@ if __name__ == '__main__':
             print('ERROR: missing %s'%k)
             missing_req = True
     if missing_req:
-        print('stopping')
         sys.exit(1)
 
     #-- this is ugly
