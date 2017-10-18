@@ -7,11 +7,12 @@ from datetime import datetime
 import xarray as xr
 import numpy as np
 
-path_tools = './easy-analysis'
-sys.path.insert(0,os.path.abspath(os.path.expanduser(path_tools)))
+path_tools = ['./easy']
+for p in path_tools:
+    sys.path.insert(0,os.path.abspath(os.path.expanduser(p)))
+
 import task_manager as tm
 from regrid import regrid
-
 import esm_tools as et
 easy = et.__file__
 
