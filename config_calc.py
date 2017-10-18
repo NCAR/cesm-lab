@@ -13,8 +13,7 @@ import task_manager as tm
 from regrid import regrid
 
 import esm_tools as et
-easy = './easy-analysis/esm_tools.py'
-print et.__file__
+easy = et.__file__
 
 calc_name = 'cesm-lab'
 diro = {}
