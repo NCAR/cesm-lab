@@ -9,9 +9,6 @@ import tempfile
 import json
 
 debug = True
-
-rmask_file = '/glade/p/work/mclong/grids/PacAtlInd_REGION_MASK_gx1v6.nc'
-
 tmpdir = os.environ['TMPDIR']
 
 #time_chunks = 5 * 12 # read data in 5 year chunks
@@ -55,6 +52,7 @@ def pop_calc_zonal_mean(file_in,file_out):
     print('computing zonal mean')
     za = '/glade/u/home/klindsay/bin/za'
 
+    rmask_file = '/glade/p/work/mclong/grids/PacAtlInd_REGION_MASK_gx1v6.nc'
     #-- run the za program
     stat = call([za,'-rmask_file',rmask_file,'-o',file_out,file_in])
     if stat != 0:
@@ -109,46 +107,70 @@ def pop_calc_global_mean(ds):
 #-- function
 #------------------------------------------------------------
 
-def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon']):
+def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'],
+                          region_mask=None):
 
-    # TODO: add masking capability
-    '''
-    rmask = xr.open_dataset(rmask_file,**xr_open_dataset)
+    if region_mask is not None:
+        if isinstance(region_mask,str):
+            rmask = xr.open_dataset(region_mask,**xr_open_dataset)
 
-    if rmask.REGION_MASK.ndim == 2:
-        region = rmask.REGION_MASK.where(rmask.REGION_MASK!=0.).pipe(np.unique)
-        region = region[~np.isnan(region)]
-        nrgn = len(region)
-        mask3d = np.zeros((nrgn,)+rmask.REGION_MASK.shape)
+            #-- make region mask into 3d xr.DataArray
+            if rmask.REGION_MASK.ndim == 2:
+                region = rmask.REGION_MASK.where(rmask.REGION_MASK!=0).pipe(np.unique)
+                region = region[~np.isnan(region)]
+                nrgn = len(region)
+                mask3d = xr.DataArray(np.zeros((nrgn,)+rmask.REGION_MASK.shape),
+                                      dims=('region','nlat','nlon'))
+                for i in range(nrgn):
+                    mask3d.values[i,:,:] = np.where(rmask.REGION_MASK==i+1,1,0)
+            else:
+                mask3d = rmask.REGION_MASK
+        else:
+            if not isinstance(region_mask,xr.DataArray):
+                print('ERROR: data mask must be xr.DataArray')
+                sys.exit(1)
+            mask3d = region_mask
     else:
-        mask3d = rmask.REGION_MASK.values
-        nrgn = mask3d.shape[0]
-    '''
+        mask3d = xr.DataArray(np.ones((len(ds.nlat),len(ds.nlon))),
+                              dims=('nlat','nlon'))
 
-    vol_wgt = []
-    area_wgt = []
+    debug_print('Region mask:')
+    debug_print(mask3d)
+
+    vol_wgt = None
+    area_wgt = None
     for variable in ds:
+
         if not all([d in ds[variable].dims for d in ['time','nlat','nlon']]):
             continue
+
+        debug_print('computing mean: %s'%variable)
 
         attrs = ds[variable].attrs
 
         avg_over_dims_v = [k for k in avg_over_dims if k in ds[variable].dims]
 
         #-- 3D vars
-        if ds[variable].dims == ('time','z_t','nlat','nlon'):
-            if not vol_wgt:
+        if any(['z_' in d for d in ds[variable].dims]):
+            if vol_wgt is None:
+                debug_print('computing ocean volume')
                 dsv = pop_ocean_volume(ds)
+                debug_print('applying mask')
+                dsv['VOL'] = dsv.VOL * mask3d
                 ds['vol_sum'] = dsv.VOL.sum(dim=avg_over_dims_v)
                 ds.vol_sum.attrs['units'] = 'cm^3'
+                debug_print('computing volume weights')
                 vol_wgt = dsv.VOL / ds.vol_sum
+                debug_print(ds)
 
             ds[variable] = (ds[variable] * vol_wgt).sum(dim=avg_over_dims_v)
 
         #-- 2D vars
-        elif ds[variable].dims == ('time','nlat','nlon'):
-            if not area_wgt:
-                ds['area_sum'] = ds.TAREA.where(ds.KMT > 0).sum(avg_over_dims_v)
+        else:
+            if area_wgt is None:
+                debug_print('computing area weights')
+                area = ds.TAREA * mask3d
+                ds['area_sum'] = area.where(ds.KMT > 0).sum(avg_over_dims_v)
                 ds.area_sum.attrs['units'] = 'cm^2'
                 area_wgt = ds['TAREA'] / ds.area_sum
             ds[variable] = (ds[variable] * ds.TAREA).sum(dim=avg_over_dims_v)
@@ -250,6 +272,7 @@ def calc_ann_mean(ds,sel={},isel={}):
 def pop_ocean_volume(ds):
     dso = ds.copy().drop([k for k in ds
                           if 'time' in ds[k].dims])
+
 
     dso['VOL'] = ds.dz * ds.TAREA
     for j in range(len(ds.nlat)):
