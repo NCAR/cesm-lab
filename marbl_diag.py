@@ -15,9 +15,10 @@ clobber = False
 case = 'g.e20a07c.GECO.T62_g17.test.004'
 casepath = '/glade/scratch/mclong/archive/%s/ocn/hist'%case
 year_range = [1,1]
+datestr_out = '%04d-%04d'%tuple(year_range)
 
 #-- configure the processing
-tool_chain = {
+toolbelt = {
     'aavgsurf' : [
         (et.calc_mean , {'dim':['nlat','nlon'],'isel':{'z_t':0,'z_t_150m':0}})
         ],
@@ -29,13 +30,13 @@ tool_chain = {
 collections = {
     'timeseries_surface' : {
         'process_name' : 'aavgsurf',
-        'processes' : [tool_chain['aavgsurf']],
+        'processes' : [toolbelt['aavgsurf']],
         'variables' : ['pCO2SURF','NPP:photoC_sp,photoC_diat,photoC_diaz'],
         'stream' : 'monthly'
     },
     'timemean_surface' : {
         'process_name' : 'tavgsurf',
-        'processes' : [tool_chain['tavgsurf']],
+        'processes' : [toolbelt['tavgsurf']],
         'variables' : ['pCO2SURF','NPP:photoC_sp,photoC_diat,photoC_diaz'],
         'stream' : 'monthly'
     }
@@ -54,26 +55,22 @@ def get_case_files(stream,varname):
     file_pattern = '.'.join([case,stream_name,stream_datepatt,'nc'])
     return sorted(glob(os.path.join(casepath,file_pattern)))
 
-#-- do the processing
-datestr_out = '%04d-%04d'%tuple(year_range)
-for category,category_spec in collections.items():
 
-    stream = category_spec['stream']
+def open_transformed_dataset(process_name,processes,variables,stream):
 
     dir_output = os.path.join(diro['out'],case,
                               datestr_out,
-                              category,stream)
+                              stream)
 
     if not os.path.exists(dir_output):
         call(['mkdir','-p',dir_output])
 
-    op = category_spec['process_name']
-    preprocess = [p[0] for plist in category_spec['processes']
-                  for p in plist]
-    preprocess_kwargs = [p[1] for plist in category_spec['processes']
-                         for p in plist]
 
-    for v in category_spec['variables']:
+    preprocess = [p[0] for plist in processes for p in plist]
+    preprocess_kwargs = [p[1] for plist in processes for p in plist]
+
+    ds = {}
+    for v in variables:
         varname = v
         varsubset_varname = v
 
@@ -86,18 +83,21 @@ for category,category_spec in collections.items():
         else:
             case_files = get_case_files(stream,varname)
 
-
-        file_out = '.'.join([case,stream,op,varname,datestr_out,'nc'])
-        file_out = os.path.join(dir_output,file_out)
+        file_out = '.'.join([case,stream,process_name,varname,datestr_out,'nc'])
+        os.path.join(dir_output,file_out)
 
         if not os.path.exists(file_out) or clobber:
-            print(file_out)
-            control = {'task' : 'open_tsdataset',
-                       'kwargs': {'file_out': file_out,
-                                  'paths': case_files,
-                                  'year_range': year_range,
-                                  'varname' : varsubset_varname,
-                                  'preprocess' : preprocess,
-                                  'preprocess_kwargs':preprocess_kwargs}}
-            et.open_tsdataset(**control['kwargs'])
-            #jid = tm.submit([easy,et.json_cmd(control)])
+            dsi = et.open_tsdataset(file_out =  file_out,
+                                   paths =  case_files,
+                                   year_range =  year_range,
+                                   varname = varsubset_varname,
+                                   preprocess =  preprocess,
+                                   preprocess_kwargs = preprocess_kwargs)
+        else:
+            dsi = xr.open_dataset(file_out,decode_times=False,decode_coords=False)
+        ds = xr.merge((ds,dsi),compat='equals')
+
+    return ds
+
+if __name__ == '__main__':
+    pass
