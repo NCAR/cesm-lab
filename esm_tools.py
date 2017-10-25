@@ -103,12 +103,17 @@ def pop_calc_global_mean(ds):
     ds = pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'])
     return ds
 
+
 #------------------------------------------------------------
 #-- function
 #------------------------------------------------------------
 
 def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'],
                           region_mask=None):
+
+    plot_grid_vars = ['TLAT','TLONG','KMT','TAREA','ULAT','ULONG','UAREA',
+                      'z_t','z_t_150m','z_w','dz',
+                      'area_sum','vol_sum','year','lat_t','lat_t_edges']
 
     if region_mask is not None:
         if isinstance(region_mask,str):
@@ -121,8 +126,8 @@ def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'],
                 nrgn = len(region)
                 mask3d = xr.DataArray(np.zeros((nrgn,)+rmask.REGION_MASK.shape),
                                       dims=('region','nlat','nlon'))
-                for i in range(nrgn):
-                    mask3d.values[i,:,:] = np.where(rmask.REGION_MASK==i+1,1,0)
+                for i,r in enumerate(region):
+                    mask3d.values[i,:,:] = np.where(rmask.REGION_MASK==r,1,0)
             else:
                 mask3d = rmask.REGION_MASK
         else:
@@ -134,36 +139,34 @@ def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'],
         mask3d = xr.DataArray(np.ones((len(ds.nlat),len(ds.nlon))),
                               dims=('nlat','nlon'))
 
-    debug_print('Region mask:')
-    debug_print(mask3d)
-
     vol_wgt = None
     area_wgt = None
     for variable in ds:
 
-        if not all([d in ds[variable].dims for d in ['time','nlat','nlon']]):
-            continue
-
-        debug_print('computing mean: %s'%variable)
-
-        attrs = ds[variable].attrs
+        if variable in ds.coords or variable in plot_grid_vars: continue
 
         avg_over_dims_v = [k for k in avg_over_dims if k in ds[variable].dims]
+        if not avg_over_dims_v: continue
+
+        debug_print('computing mean: %s'%variable)
+        attrs = ds[variable].attrs
 
         #-- 3D vars
         if any(['z_' in d for d in ds[variable].dims]):
             if vol_wgt is None:
                 debug_print('computing ocean volume')
-                dsv = pop_ocean_volume(ds)
+                VOL = pop_ocean_volume(ds)
                 debug_print('applying mask')
-                dsv['VOL'] = dsv.VOL * mask3d
-                ds['vol_sum'] = dsv.VOL.sum(dim=avg_over_dims_v)
+                VOL = VOL * mask3d
+                ds['vol_sum'] = VOL.sum(dim=avg_over_dims_v)
                 ds.vol_sum.attrs['units'] = 'cm^3'
                 debug_print('computing volume weights')
-                vol_wgt = dsv.VOL / ds.vol_sum
-                debug_print(ds)
+                vol_wgt = VOL / ds.vol_sum
 
             ds[variable] = (ds[variable] * vol_wgt).sum(dim=avg_over_dims_v)
+
+            #-- mask variable
+            ds[variable] = ds[variable].where(ds.vol_sum>0.)
 
         #-- 2D vars
         else:
@@ -172,8 +175,10 @@ def pop_calc_spatial_mean(ds,avg_over_dims=['z_t','nlat','nlon'],
                 area = ds.TAREA * mask3d
                 ds['area_sum'] = area.where(ds.KMT > 0).sum(avg_over_dims_v)
                 ds.area_sum.attrs['units'] = 'cm^2'
-                area_wgt = ds['TAREA'] / ds.area_sum
-            ds[variable] = (ds[variable] * ds.TAREA).sum(dim=avg_over_dims_v)
+                area_wgt = ds.TAREA / ds.area_sum
+
+            ds[variable] = (ds[variable] * area_wgt).sum(dim=avg_over_dims_v)
+            ds[variable] = ds[variable].where(ds.area_sum>0.)
 
         ds[variable].attrs = attrs
 
@@ -270,17 +275,13 @@ def calc_ann_mean(ds,sel={},isel={}):
 #------------------------------------------------------------
 
 def pop_ocean_volume(ds):
-    dso = ds.copy().drop([k for k in ds
-                          if 'time' in ds[k].dims])
-
-
-    dso['VOL'] = ds.dz * ds.TAREA
+    VOL = ds.dz * ds.TAREA
     for j in range(len(ds.nlat)):
         for i in range(len(ds.nlon)):
             k = ds.KMT.values[j,i].astype(int)
-            dso.VOL.values[k:,j,i] = 0.
+            VOL.values[k:,j,i] = 0.
 
-    return dso
+    return VOL
 
 #----------------------------------------------------------------
 #-- function
@@ -654,6 +655,89 @@ def open_tsdataset(paths,
         dsi.to_netcdf(file_out,unlimited_dims='time')
 
     return dsi
+
+#-------------------------------------------------------------------------------
+#-- function
+#-------------------------------------------------------------------------------
+
+def compute_ens_mean_std_brute(file_in_list,varname,
+                               file_out_avg='',
+                               file_out_std='',
+                               file_out_cnt=''):
+    '''compute ensemble mean and standard deviation
+    I am suspecting bugs in xarray.open_mfdataset that lead to corrupt
+    data at some indices...moreover, simply concatenating datasets on ensemble
+    dimension and computing a mean over that dimension seems to be very slow.
+    Maybe this will be a better solution?
+    '''
+    dss = [xr.open_dataset(f,decode_times=False,decode_coords=False)
+           for f in file_in_list]
+
+    v = varname
+
+    dsg = dss[0].drop([k for k in dss[0] if 'time' in dss[0][k].dims])
+    dsom = dss[0].copy().drop([k for k in dss[0] if k != v])
+    dsos = dss[0].copy().drop([k for k in dss[0] if k != v])
+    dson = dss[0].copy().drop([k for k in dss[0] if k != v])
+
+    dsom[v].values[:] = 0.
+    dsos[v].values[:] = 0.
+    dson[v].values[:] = 0
+
+    for i,ds in enumerate(dss):
+        with timer('computing %d'%i):
+            xnew = ds[v].values
+            cnt = ~np.isnan(xnew)*1
+
+            xbar = dsom[v].values
+            n = dson[v].values
+            s2 = dsos[v].values
+
+            n += cnt
+            dev = np.where(np.isnan(xnew),0.,xnew - xbar)
+            xbar += np.divide(dev, n, where=n>0)
+            dev2 = np.where(np.isnan(xnew),0.,xnew - xbar)
+            s2 += dev*dev2
+
+            dsom[v].values = xbar
+            dson[v].values = n
+            dsos[v].values = s2
+
+    print dsom
+
+    #-- apply normalizations and fill values
+    #-- count
+    n = dson[v].values
+
+    #-- normalize variance
+    var = dsos[v].values
+    dsos[v].values = np.where(n > 2, np.divide(var,(n-1),where=n-1>0), np.nan)
+
+    #-- set missing values
+    var = dsom[v].values
+    dsom[v].values = np.where(n == 0, np.nan, var)
+
+    dsos[v].values = np.sqrt(dsos[v].values)
+
+    #-- output single precisions
+    dsom[v] = dsom[v].astype(np.float32)
+    dson[v] = dson[v].astype(np.float32)
+    dsos[v] = dsos[v].astype(np.float32)
+
+    dsom = xr.merge((dsom,dsg))
+    dsos = xr.merge((dsos,dsg))
+    dson = xr.merge((dson,dsg))
+
+    #-- write to file
+    if file_out_avg:
+        dsom.to_netcdf(file_out_avg)
+    if file_out_std:
+        dsos.to_netcdf(file_out_std)
+    if file_out_cnt:
+        dson.to_netcdf(file_out_cnt)
+
+    return dsom,dsos,dson
+
 
 #----------------------------------------------------------------
 #---- CLASS
