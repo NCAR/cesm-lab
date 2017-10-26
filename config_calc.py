@@ -20,7 +20,7 @@ calc_name = 'cesm-lab'
 diro = {}
 diro['out'] = '/glade/scratch/'+os.environ['USER']+'/calcs/'+calc_name
 diro['work'] = '/glade/scratch/'+os.environ['USER']+'/calcs/'+calc_name+'/work'
-diro['fig'] =  '/glade/p/work/'+os.environ['USER']+'/fig/'+calc_name
+diro['fig'] =  './fig'
 diro['logs'] = './logs'
 
 for pth in diro.values():

@@ -17,7 +17,7 @@ casepath = '/glade/scratch/mclong/archive/%s/ocn/hist'%case
 year_range = [1,1]
 datestr_out = '%04d-%04d'%tuple(year_range)
 
-#-- configure the processing
+#-- configure the processing operations
 toolbelt = {
     'aavgsurf' : [
         (et.calc_mean , {'dim':['nlat','nlon'],'isel':{'z_t':0,'z_t_150m':0}})
@@ -27,20 +27,6 @@ toolbelt = {
         ],
 }
 
-collections = {
-    'timeseries_surface' : {
-        'process_name' : 'aavgsurf',
-        'processes' : [toolbelt['aavgsurf']],
-        'variables' : ['pCO2SURF','NPP:photoC_sp,photoC_diat,photoC_diaz'],
-        'stream' : 'monthly'
-    },
-    'timemean_surface' : {
-        'process_name' : 'tavgsurf',
-        'processes' : [toolbelt['tavgsurf']],
-        'variables' : ['pCO2SURF','NPP:photoC_sp,photoC_diat,photoC_diaz'],
-        'stream' : 'monthly'
-    }
-}
 
 #-- model specific information
 # TODO: enable multiple streams for particular temporal resolution:
@@ -48,7 +34,7 @@ collections = {
 # place holder for getting files
 def get_case_files(stream,varname):
     stream_definitions = {'monthly': {'name':'pop.h','datepatt':'????-??'},
-                          'daily' :  {'name':'pop.h.nday1','datepatt':'????-??-??'}}
+                          'daily' :  {'name':'pop.h.ecosys.nday1','datepatt':'????-??-??'}}
 
     stream_name = stream_definitions[stream]['name']
     stream_datepatt = stream_definitions[stream]['datepatt']
@@ -84,7 +70,7 @@ def open_transformed_dataset(process_name,processes,variables,stream):
             case_files = get_case_files(stream,varname)
 
         file_out = '.'.join([case,stream,process_name,varname,datestr_out,'nc'])
-        os.path.join(dir_output,file_out)
+        file_out = os.path.join(dir_output,file_out)
 
         if not os.path.exists(file_out) or clobber:
             dsi = et.open_tsdataset(file_out =  file_out,
