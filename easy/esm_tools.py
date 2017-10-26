@@ -487,11 +487,12 @@ def require_variables(ds,req_var):
 #-- function
 #----------------------------------------------------------------
 
-def pop_derive_var(ds,varname):
+def pop_derive_var(ds,varname,drop_derivedfrom_vars=True):
+
     if varname == 'OUR':
-        return pop_derive_var_OUR(ds)
+        return pop_derive_var_OUR(ds,drop_derivedfrom_vars)
     elif varname == 'NPP':
-        return pop_derive_var_NPP(ds)
+        return pop_derive_var_NPP(ds,drop_derivedfrom_vars)
     else:
         print('ERROR: unknown derived varname: %s'%varname)
         sys.exit(1)
@@ -500,7 +501,7 @@ def pop_derive_var(ds,varname):
 #-- function
 #----------------------------------------------------------------
 
-def pop_derive_var_OUR(ds):
+def pop_derive_var_OUR(ds,drop_derivedfrom_vars=True):
     require_variables(ds,['AOU','IAGE'])
 
     ds['IAGE'] = ds.IAGE.where(ds.IAGE>0.25)
@@ -508,7 +509,8 @@ def pop_derive_var_OUR(ds):
     ds.OUR.attrs['units'] = ds.AOU.attrs['units']+'/'+ds.IAGE.attrs['units']
     ds.OUR.attrs['long_name'] = 'OUR'
 
-    ds = ds.drop(['AOU','IAGE'])
+    if drop_derivedfrom_vars:
+        ds = ds.drop(['AOU','IAGE'])
 
     return ds
 
@@ -516,14 +518,16 @@ def pop_derive_var_OUR(ds):
 #-- function
 #----------------------------------------------------------------
 
-def pop_derive_var_NPP(ds):
+def pop_derive_var_NPP(ds,drop_derivedfrom_vars=True):
 
     require_variables(ds,['photoC_sp','photoC_diat','photoC_diaz'])
 
     ds['NPP'] = ds.photoC_sp + ds.photoC_diat + ds.photoC_diaz
     ds.NPP.attrs['units'] = ds.photoC_sp.attrs['units']
     ds.NPP.attrs['long_name'] = 'NPP'
-    ds = ds.drop(['photoC_sp','photoC_diat','photoC_diaz'])
+
+    if drop_derivedfrom_vars:
+        ds = ds.drop(['photoC_sp','photoC_diat','photoC_diaz'])
 
     return ds
 
@@ -543,6 +547,7 @@ def variable_subset(ds,varname,keep_grids_vars=True):
     grid_vars = [k for k in ds.keys() if 'time' not in ds[k].dims]
     drop_vars = [k for k in ds.keys()
                  if 'time' in ds[k].dims and k not in keep_vars]
+
     if not keep_grids_vars:
         drop_vars.extend(grid_vars)
 

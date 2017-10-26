@@ -7,14 +7,15 @@ from datetime import datetime
 import xarray as xr
 import numpy as np
 
-path_tools = ['./easy']
+cesm_lab_path = '/glade/u/home/mclong/p/cesm-lab'
+path_tools = [cesm_lab_path,os.path.join(cesm_lab_path,'easy')]
 for p in path_tools:
     sys.path.insert(0,os.path.abspath(os.path.expanduser(p)))
 
 import task_manager as tm
 from regrid import regrid
-import esm_tools as et
-easy = et.__file__
+import esm_tools as ez
+easy = ez.__file__
 
 calc_name = 'cesm-lab'
 diro = {}
