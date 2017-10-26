@@ -20,7 +20,7 @@ easy = ez.__file__
 calc_name = 'cesm-lab'
 diro = {}
 diro['out'] = '/glade/scratch/'+os.environ['USER']+'/calcs/'+calc_name
-diro['work'] = '/glade/scratch/'+os.environ['USER']+'/calcs/'+calc_name+'/work'
+diro['notebooks'] = os.path.join(cesm_lab_path,'case_notebooks')
 diro['fig'] =  './fig'
 diro['logs'] = './logs'
 

@@ -149,14 +149,12 @@ if __name__ == '__main__':
 
     start_index = 0
 
-    dir_output = os.path.join(diro['out'],case,'notebooks')
+    dir_output = os.path.join(diro['notebooks'],case)
     if not os.path.exists(dir_output):
         call(['mkdir','-p',dir_output])
 
     call(['cp','config_calc.py',dir_output])
     notebooks = ['timemean_surface.ipynb','timeseries_surface.ipynb']
-
-
 
     for i,nb in enumerate(notebooks):
         if i < start_index: continue
