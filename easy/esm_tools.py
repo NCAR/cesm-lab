@@ -200,26 +200,25 @@ def calc_ann_mean(ds,sel={},isel={}):
     time_dimname = 'time'
     ds = dimension_subset(ds,sel,isel)
 
-    with timer('computing weights for annual means'):
-        tb_name = ''
-        if 'bounds' in ds[time_dimname].attrs:
-            tb_name = ds[time_dimname].attrs['bounds']
-            tb = ds[tb_name].values
-            wgt = np.diff(tb[:,:],axis=1)[:,0]
-        else:
-            print('no time bound attribute found')
-            wgt = np.ones(len(ds.time))
+    tb_name = ''
+    if 'bounds' in ds[time_dimname].attrs:
+        tb_name = ds[time_dimname].attrs['bounds']
+        tb = ds[tb_name].values
+        wgt = np.diff(tb[:,:],axis=1)[:,0]
+    else:
+        print('no time bound attribute found')
+        wgt = np.ones(len(ds.time))
 
-        #-- compute weights (assume 'year' is there)
-        time_bnd = xr.DataArray(wgt,coords=[ds.time])
-        dsw = xr.Dataset({'year':ds.year,'time_bnd':time_bnd})
-        wgt = dsw.groupby('year')/dsw.groupby('year').sum()
-        nyr = len(dsw.groupby('year').groups)
+    #-- compute weights (assume 'year' is there)
+    time_bnd = xr.DataArray(wgt,coords=[ds.time])
+    dsw = xr.Dataset({'year':ds.year,'time_bnd':time_bnd})
+    wgt = dsw.groupby('year')/dsw.groupby('year').sum()
+    nyr = len(dsw.groupby('year').groups)
 
-        #-- test that weights sum to 1.0 for each year
-        np.testing.assert_allclose(
-            wgt['time_bnd'].groupby('year').sum().values,
-            np.ones(nyr))
+    #-- test that weights sum to 1.0 for each year
+    np.testing.assert_allclose(
+        wgt['time_bnd'].groupby('year').sum().values,
+        np.ones(nyr))
 
     print('computing ann mean over %d years'%nyr)
 
@@ -231,42 +230,38 @@ def calc_ann_mean(ds,sel={},isel={}):
 
     # groupby.sum() does not seem to handle missing values correctly: yeilds 0 not nan
     # the groupby.mean() does return nans, so create a mask of valid values
-    with timer('compute mask'):
-        valid = ds.groupby('year').mean(dim='time').notnull()
+    valid = ds.groupby('year').mean(dim='time').notnull()
 
     # drop of "year" required for viable output
-    with timer('compute weighted mean'):
-        ds = ds.drop(['month','yearfrac','year'])
-        dso = (ds * wgt['time_bnd']).groupby('year').sum(dim='time')
-        for v in ds:
-            if v not in dso: continue
-            if 'dtype' in ds[v].encoding:
-                dso[v] = dso[v].astype(ds[v].encoding['dtype'])
-            if ds[v].attrs:
-                dso[v].attrs = ds[v].attrs
+    ds = ds.drop(['month','yearfrac','year'])
+    dso = (ds * wgt['time_bnd']).groupby('year').sum(dim='time')
+    for v in ds:
+        if v not in dso: continue
+        if 'dtype' in ds[v].encoding:
+            dso[v] = dso[v].astype(ds[v].encoding['dtype'])
+        if ds[v].attrs:
+            dso[v].attrs = ds[v].attrs
 
     #-- apply mask for valid values
-    with timer('apply missing value mask'):
-        dso = dso.where(valid)
+    dso = dso.where(valid)
 
     #-- fix the time coordindate
-    with timer('fix the time coordinate and merge grid vars'):
-        #-- make time coordinate
-        time_coord = (ds[time_dimname] * wgt['time_bnd']).groupby('year').sum(dim='time')
-        time_coord = time_coord.rename({'year':'time'})
-        time_coord = time_coord.assign_coords(time=time_coord)
-        time_coord.attrs = ds.time.attrs
+    #-- make time coordinate
+    time_coord = (ds[time_dimname] * wgt['time_bnd']).groupby('year').sum(dim='time')
+    time_coord = time_coord.rename({'year':'time'})
+    time_coord = time_coord.assign_coords(time=time_coord)
+    time_coord.attrs = ds.time.attrs
 
-        #-- detach and reattach 'year'; put time
-        year = dso.year.rename({'year':'time'})
-        year = year.assign_coords(time=time_coord)
-        dso = dso.rename({'year':'time'})
-        dso = dso.assign_coords(time=time_coord)
-        dso['year'] = year
+    #-- detach and reattach 'year'; put time
+    year = dso.year.rename({'year':'time'})
+    year = year.assign_coords(time=time_coord)
+    dso = dso.rename({'year':'time'})
+    dso = dso.assign_coords(time=time_coord)
+    dso['year'] = year
 
 
-        #-- put the grid variables back
-        dso = xr.merge((dso,dsg))
+    #-- put the grid variables back
+    dso = xr.merge((dso,dsg))
 
     return dso
 
