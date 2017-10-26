@@ -51,7 +51,6 @@ def open_transformed_dataset(process_name,processes,variables,stream):
     if not os.path.exists(dir_output):
         call(['mkdir','-p',dir_output])
 
-
     preprocess = [p[0] for plist in processes for p in plist]
     preprocess_kwargs = [p[1] for plist in processes for p in plist]
 
