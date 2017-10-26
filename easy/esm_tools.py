@@ -220,8 +220,6 @@ def calc_ann_mean(ds,sel={},isel={}):
         wgt['time_bnd'].groupby('year').sum().values,
         np.ones(nyr))
 
-    print('computing ann mean over %d years'%nyr)
-
     #-- compute annual mean
     time_vars = [k for k in ds.keys() if time_dimname in ds[k].dims]
     grid_vars = [k for k in ds.keys() if time_dimname not in ds[k].dims]
