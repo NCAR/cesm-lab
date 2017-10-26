@@ -491,6 +491,8 @@ def pop_derive_var(ds,varname,drop_derivedfrom_vars=True):
         return pop_derive_var_OUR(ds,drop_derivedfrom_vars)
     elif varname == 'NPP':
         return pop_derive_var_NPP(ds,drop_derivedfrom_vars)
+    elif varname == 'POC_100m':
+        return pop_derive_var_POC_100m(ds,drop_derivedfrom_vars)
     else:
         print('ERROR: unknown derived varname: %s'%varname)
         sys.exit(1)
